@@ -14,6 +14,13 @@
 // With what we want & what we don't defined we can include the API
 #include "Gateware.h"
 #include "renderer.h"
+#include <iostream>
+#include <fstream>
+#include <vector>
+#include <string>
+
+std::vector<std::string> SplitString(std::string s, char delimiter);
+
 // open some namespaces to compact the code a bit
 using namespace GW;
 using namespace CORE;
@@ -22,6 +29,80 @@ using namespace GRAPHICS;
 // lets pop a window and use D3D12 to clear to a jade colored screen
 int main()
 {
+	std::vector<DirectX::XMMATRIX> meshes;
+
+	std::ifstream inputStream;
+	inputStream.open("GameLevel.txt");
+
+	if (inputStream.is_open())
+	{
+		std::string lineInfo = "";
+		std::string objName = "";
+		
+		while (true)
+		{
+			std::getline(inputStream, lineInfo);
+
+			if (lineInfo.compare("MESH") == 0)
+			{
+				DirectX::XMMATRIX newMesh;
+
+				std::getline(inputStream, objName);
+
+				DirectX::XMVECTOR vector;
+				std::string stringVector;
+				std::string extractedNumber;
+				std::vector<std::string> coordinates;
+				
+				std::getline(inputStream, lineInfo);
+				stringVector = lineInfo;
+				stringVector = stringVector.substr(13, 256);
+				stringVector.erase(stringVector.length() - 1);
+				coordinates = SplitString(stringVector, ',');
+				newMesh.r[0] = { std::stof(coordinates[0]), std::stof(coordinates[1]), std::stof(coordinates[2]), std::stof(coordinates[3])};
+
+				std::getline(inputStream, lineInfo);
+				stringVector = lineInfo;
+				stringVector = stringVector.substr(13, 256);
+				stringVector.erase(stringVector.length() - 1);
+				coordinates = SplitString(stringVector, ',');
+				newMesh.r[1] = { std::stof(coordinates[0]), std::stof(coordinates[1]), std::stof(coordinates[2]), std::stof(coordinates[3]) };
+
+				std::getline(inputStream, lineInfo);
+				stringVector = lineInfo;
+				stringVector = stringVector.substr(13, 256);
+				stringVector.erase(stringVector.length() - 1);
+				coordinates = SplitString(stringVector, ',');
+				newMesh.r[2] = { std::stof(coordinates[0]), std::stof(coordinates[1]), std::stof(coordinates[2]), std::stof(coordinates[3]) };
+
+				std::getline(inputStream, lineInfo);
+				stringVector = lineInfo;
+				stringVector = stringVector.substr(13, 256);
+				stringVector.erase(stringVector.length() - 1);
+				stringVector.erase(stringVector.length() - 1);
+				coordinates = SplitString(stringVector, ',');
+				newMesh.r[3] = { std::stof(coordinates[0]), std::stof(coordinates[1]), std::stof(coordinates[2]), std::stof(coordinates[3]) };
+
+				std::cout << objName << std::endl;
+				for (int i = 0; i < 4; i++)
+				{
+					std::cout << DirectX::XMVectorGetX(newMesh.r[i]) << ' ' << DirectX::XMVectorGetY(newMesh.r[i]) << ' ' << DirectX::XMVectorGetZ(newMesh.r[i]) << ' ' << DirectX::XMVectorGetW(newMesh.r[i]) << ' ' << std::endl;
+				}
+			}
+
+			std::cout << std::endl;
+
+			if (inputStream.eof())
+			{
+				break;
+			}
+		}
+
+		inputStream.close();
+	}
+
+	
+
 	GWindow win;
 	GEventResponder msgs;
 	GDirectX12Surface d3d12;
@@ -63,4 +144,26 @@ int main()
 		}
 	}
 	return 0; // that's all folks
+}
+
+std::vector<std::string> SplitString(std::string s, char delimiter)
+{
+	std::vector<std::string> result;
+	std::string currentString;
+
+	for (int i = 0; i < s.length() - 1; i++)
+	{
+		if (s.at(i) == delimiter)
+		{
+			result.push_back(currentString);
+			currentString = "";
+		}
+		else
+		{
+			currentString.push_back(s.at(i));
+		}
+	}
+	result.push_back(currentString);
+
+	return result;
 }
