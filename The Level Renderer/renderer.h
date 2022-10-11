@@ -20,53 +20,36 @@ struct SHADER_VARS
 };
 
 // Simple Vertex Shader
-const char* vertexShaderSource = R"(
-struct Vertex{ float4 xyzw : POSITION;};
-
-cbuffer SHADER_VARS
-{
-	float4x4 worldMatrix; // 16 32bit values
-	float4x4 viewMatrix; // 16 32bit values
-	float4x4 projectionMatrix; // 16 32bit values
-};
-
-// an ultra simple hlsl vertex shader
-// TODO: Part 2b
-	// TODO: Part 2f
-	// TODO: Part 3b
-// TODO: Part 1c
-float4 main(Vertex inputVertex) : SV_POSITION
-{
-	// TODO: Part 2d, Part 2f, Part 3b
-	float4 finalVert = mul(worldMatrix, inputVertex.xyzw);
-	finalVert = mul(viewMatrix, finalVert);
-	finalVert = mul(projectionMatrix, finalVert);
-	//finalVert[0] /= finalVert[3];
-	//finalVert[1] /= finalVert[3];
-	//finalVert[2] /= finalVert[3];
-
-	return finalVert;
-}
-)";
+const char* vertexShaderSource = R"()";
 // Simple Pixel Shader
-const char* pixelShaderSource = R"(
-// an ultra simple hlsl pixel shader
-float4 main() : SV_TARGET 
-{	
-	return float4(0.0f,0.0f,1.0f,0); // TODO: Part 1a
-}
-)";
+const char* pixelShaderSource = R"()";
 
 // Creation, Rendering & Cleanup
 class Renderer
 {
+	std::string ShaderAsString(const char* shaderFilePath)
+	{
+		std::string output;
+		unsigned int stringLength = 0;
+		GW::SYSTEM::GFile file; file.Create();
+		file.GetFileSize(shaderFilePath, stringLength);
+		if (stringLength && +file.OpenBinaryRead(shaderFilePath))
+		{
+			output.resize(stringLength);
+			file.Read(&output[0], stringLength);
+		}
+		else
+			std::cout << "ERROR: Shader Source File \"" << shaderFilePath << "\" Not Found!" << std::endl;
+		return output;
+	}
+
 	// proxy handles
 	GW::SYSTEM::GWindow win;
 	GW::GRAPHICS::GDirectX12Surface d3d;
-	// TODO: Part 4a
+
 	GW::INPUT::GInput input;
 	GW::INPUT::GController controller;
-	// TODO: Part 2a
+
 	DirectX::XMMATRIX worldMatrixFloor;
 	DirectX::XMMATRIX worldMatrixWall1;
 	DirectX::XMMATRIX worldMatrixWall2;
@@ -75,9 +58,7 @@ class Renderer
 	DirectX::XMMATRIX worldMatrixCeiling;
 
 	DirectX::XMMATRIX viewMatrix;
-	// TODO: Part 3c
-	// TODO: Part 2e
-	// TODO: Part 3a
+
 	DirectX::XMMATRIX projectionMatrix;
 
 	float verticalFOV;
@@ -94,10 +75,9 @@ class Renderer
 	Microsoft::WRL::ComPtr<ID3D12RootSignature>	rootSignature;
 	Microsoft::WRL::ComPtr<ID3D12PipelineState>	pipeline;
 public:
-	// TODO: Part 1c
-	// TODO: Part 2b
-		// TODO: Part 2f
-		// TODO: Part 3b
+	std::vector<DirectX::XMMATRIX> meshes;
+	std::vector<std::string> meshNames;
+
 	Renderer(GW::SYSTEM::GWindow _win, GW::GRAPHICS::GDirectX12Surface _d3d)
 	{
 		win = _win;
@@ -105,27 +85,27 @@ public:
 		ID3D12Device* creator;
 		d3d.GetDevice((void**)&creator);
 
-		// TODO: Part 4a
 		input.Create(win);
 		controller.Create();
 
-		// TODO: Part 2a
+#pragma region grids
+
 		worldMatrixFloor = DirectX::XMMatrixIdentity();
-		worldMatrixFloor = DirectX::XMMatrixMultiply(worldMatrixFloor, DirectX::XMMatrixRotationX(90 * pi / 180 ));
+		worldMatrixFloor = DirectX::XMMatrixMultiply(worldMatrixFloor, DirectX::XMMatrixRotationX(90 * pi / 180));
 		worldMatrixFloor = DirectX::XMMatrixMultiply(worldMatrixFloor, DirectX::XMMatrixTranslation(0, -.5f, 0));
-		
+
 		worldMatrixWall1 = DirectX::XMMatrixIdentity();
 		worldMatrixWall1 = DirectX::XMMatrixMultiply(worldMatrixWall1, DirectX::XMMatrixTranslation(0, 0, -.5f));
 		//worldMatrixWall1 = DirectX::XMMatrixMultiply(worldMatrixWall1, DirectX::XMMatrixRotationX(90 * pi / 180));
-				   
+
 		worldMatrixWall2 = DirectX::XMMatrixIdentity();
 		worldMatrixWall2 = DirectX::XMMatrixMultiply(worldMatrixWall2, DirectX::XMMatrixRotationY(90 * pi / 180));
-		worldMatrixWall2 = DirectX::XMMatrixMultiply(worldMatrixWall2, DirectX::XMMatrixTranslation(-.5f, 0, 0));	   
-		
+		worldMatrixWall2 = DirectX::XMMatrixMultiply(worldMatrixWall2, DirectX::XMMatrixTranslation(-.5f, 0, 0));
+
 		worldMatrixWall3 = DirectX::XMMatrixIdentity();
 		worldMatrixWall3 = DirectX::XMMatrixMultiply(worldMatrixWall3, DirectX::XMMatrixRotationY(90 * pi / 180));
 		worldMatrixWall3 = DirectX::XMMatrixMultiply(worldMatrixWall3, DirectX::XMMatrixTranslation(.5f, 0, 0));
-				   
+
 		worldMatrixWall4 = DirectX::XMMatrixIdentity();
 		worldMatrixWall4 = DirectX::XMMatrixMultiply(worldMatrixWall4, DirectX::XMMatrixTranslation(0, 0, .5f));
 		//worldMatrixWall4 = DirectX::XMMatrixMultiply(worldMatrixWall4, DirectX::XMMatrixRotationX(90 * pi / 180));
@@ -133,17 +113,15 @@ public:
 		worldMatrixCeiling = DirectX::XMMatrixIdentity();
 		worldMatrixCeiling = DirectX::XMMatrixMultiply(worldMatrixCeiling, DirectX::XMMatrixRotationX(90 * pi / 180));
 		worldMatrixCeiling = DirectX::XMMatrixMultiply(worldMatrixCeiling, DirectX::XMMatrixTranslation(0, .5f, 0));
+#pragma endregion
 
-		// TODO: Part 3c
-		// TODO: Part 2e
+
 		viewMatrix = DirectX::XMMatrixIdentity();
 		viewMatrix = DirectX::XMMatrixMultiply(viewMatrix, DirectX::XMMatrixTranslation(0, 0, 0));
 		viewMatrix = DirectX::XMMatrixMultiply(viewMatrix, DirectX::XMMatrixRotationX(0));
 		viewMatrix = DirectX::XMMatrixMultiply(viewMatrix, DirectX::XMMatrixRotationY(0));
 		DirectX::XMVECTOR determinant = DirectX::XMMatrixDeterminant(viewMatrix);
 		viewMatrix = DirectX::XMMatrixInverse(&determinant, viewMatrix);
-		// TODO: Part 1b
-		// TODO: Part 1c
 		
 		verticalFOV = 65 * pi / 180;
 		nearPlane = .1f;
@@ -170,7 +148,6 @@ public:
 			verts[i + 53] = { i / 50.0f - 0.5f, 0.5f, 0, 1 };;
 		}
 
-		// TODO: Part 1d
 		creator->CreateCommittedResource( // using UPLOAD heap for simplicity
 			&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD), // DEFAULT recommend  
 			D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Buffer(sizeof(verts)),
@@ -181,7 +158,7 @@ public:
 			reinterpret_cast<void**>(&transferMemoryLocation));
 		memcpy(transferMemoryLocation, verts, sizeof(verts));
 		vertexBuffer->Unmap(0, nullptr);
-		// TODO: Part 1c
+
 		// Create a vertex View to send to a Draw() call.
 		vertexView.BufferLocation = vertexBuffer->GetGPUVirtualAddress();
 		vertexView.StrideInBytes = sizeof(Vertex);
@@ -191,9 +168,12 @@ public:
 #if _DEBUG
 		compilerFlags |= D3DCOMPILE_DEBUG;
 #endif
+		std::string pixelShader = ShaderAsString("PixelShader.hlsl");
+		std::string vertexShader = ShaderAsString("VertexShader.hlsl");
+
 		Microsoft::WRL::ComPtr<ID3DBlob> vsBlob, errors;
-		if (FAILED(D3DCompile(vertexShaderSource, strlen(vertexShaderSource),
-			nullptr, nullptr, nullptr, "main", "vs_5_0", compilerFlags, 0, 
+		if (FAILED(D3DCompile(vertexShader.c_str(), strlen(vertexShader.c_str()),
+			nullptr, nullptr, nullptr, "main", "vs_5_1", compilerFlags, 0,
 			vsBlob.GetAddressOf(), errors.GetAddressOf())))
 		{
 			std::cout << (char*)errors->GetBufferPointer() << std::endl;
@@ -201,20 +181,19 @@ public:
 		}
 		// Create Pixel Shader
 		Microsoft::WRL::ComPtr<ID3DBlob> psBlob; errors.Reset();
-		if (FAILED(D3DCompile(pixelShaderSource, strlen(pixelShaderSource),
-			nullptr, nullptr, nullptr, "main", "ps_5_0", compilerFlags, 0, 
+		if (FAILED(D3DCompile(pixelShader.c_str(), strlen(pixelShader.c_str()),
+			nullptr, nullptr, nullptr, "main", "ps_5_1", compilerFlags, 0,
 			psBlob.GetAddressOf(), errors.GetAddressOf())))
 		{
 			std::cout << (char*)errors->GetBufferPointer() << std::endl;
 			abort();
 		}
-		// TODO: Part 1c
 		// Create Input Layout
 		D3D12_INPUT_ELEMENT_DESC format[] = 
 		{
 			{"POSITION", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
 		};
-		// TODO: Part 2c
+
 		CD3DX12_ROOT_PARAMETER rootParam;
 		rootParam.InitAsConstants(48, 0);
 		// create root signature
@@ -237,7 +216,7 @@ public:
 		psDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
 		psDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
 		psDesc.SampleMask = UINT_MAX;
-		psDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_LINE; // TODO: Part 1b
+		psDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_LINE;
 		psDesc.NumRenderTargets = 1;
 		psDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
 		psDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
@@ -261,18 +240,17 @@ public:
 		cmd->SetGraphicsRootSignature(rootSignature.Get());
 		cmd->OMSetRenderTargets(1, &rtv, FALSE, &dsv);
 		cmd->SetPipelineState(pipeline.Get());
-		// TODO: Part 3a
-		// TODO: Part 2b
-		SHADER_VARS shaderVars = { worldMatrixFloor, viewMatrix, projectionMatrix };
-		cmd->SetGraphicsRoot32BitConstants(0, 48, &shaderVars, 0);
-		
-		// TODO: Part 2d
+
 		// now we can draw
 		cmd->IASetVertexBuffers(0, 1, &vertexView);
-		// TODO: Part 1b
+
 		cmd->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_LINELIST);
-		cmd->DrawInstanced(104, 1, 0, 0); // TODO: Part 1d
-		// TODO: Part 3d
+
+		
+#pragma region drawGrid
+		SHADER_VARS shaderVars = { worldMatrixFloor, viewMatrix, projectionMatrix };
+		cmd->SetGraphicsRoot32BitConstants(0, 48, &shaderVars, 0);
+		cmd->DrawInstanced(104, 1, 0, 0);
 
 		shaderVars = { worldMatrixWall1, viewMatrix, projectionMatrix };
 		cmd->SetGraphicsRoot32BitConstants(0, 48, &shaderVars, 0);
@@ -293,11 +271,12 @@ public:
 		shaderVars = { worldMatrixCeiling, viewMatrix, projectionMatrix };
 		cmd->SetGraphicsRoot32BitConstants(0, 48, &shaderVars, 0);
 		cmd->DrawInstanced(104, 1, 0, 0);
+#pragma endregion
+
 
 		// release temp handles
 		cmd->Release();
 	}
-	// TODO: Part 4b
 	void UpdateCamera()
 	{
 		nowTime = std::chrono::high_resolution_clock::now();
@@ -376,12 +355,6 @@ public:
 
 		pastTime = nowTime;
 	}
-		// TODO: Part 4c
-		// TODO: Part 4d
-		// TODO: Part 4e
-		// TODO: Part 4f
-		// TODO: Part 4g
-		// TODO: Part 4c
 	~Renderer()
 	{
 		// ComPtr will auto release so nothing to do here 

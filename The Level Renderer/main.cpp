@@ -30,6 +30,7 @@ using namespace GRAPHICS;
 int main()
 {
 	std::vector<DirectX::XMMATRIX> meshes;
+	std::vector<std::string> meshNames;
 
 	std::ifstream inputStream;
 	inputStream.open("GameLevel.txt");
@@ -82,6 +83,9 @@ int main()
 				stringVector.erase(stringVector.length() - 1);
 				coordinates = SplitString(stringVector, ',');
 				newMesh.r[3] = { std::stof(coordinates[0]), std::stof(coordinates[1]), std::stof(coordinates[2]), std::stof(coordinates[3]) };
+
+				meshNames.push_back(objName);
+				meshes.push_back(newMesh);
 
 				std::cout << objName << std::endl;
 				for (int i = 0; i < 4; i++)
