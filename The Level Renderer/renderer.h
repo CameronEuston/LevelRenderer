@@ -3,26 +3,34 @@
 #include <d3dcompiler.h>
 #pragma comment(lib, "d3dcompiler.lib")
 #include "d3dx12.h" // official helper file provided by microsoft
-#include <DirectXMath.h>
-
-float pi = 3.14159265359;
-
-struct Vertex
-{
-	float x, y, z, w;
-};
-
-struct SHADER_VARS
-{
-	DirectX::XMMATRIX worldMatrix;
-	DirectX::XMMATRIX viewMatrix;
-	DirectX::XMMATRIX projectionMatrix;
-};
+#include "Model.h"
 
 // Simple Vertex Shader
 const char* vertexShaderSource = R"()";
 // Simple Pixel Shader
 const char* pixelShaderSource = R"()";
+
+std::vector<std::string> SplitString(std::string s, char delimiter)
+{
+	std::vector<std::string> result;
+	std::string currentString;
+
+	for (int i = 0; i < s.length() - 1; i++)
+	{
+		if (s.at(i) == delimiter)
+		{
+			result.push_back(currentString);
+			currentString = "";
+		}
+		else
+		{
+			currentString.push_back(s.at(i));
+		}
+	}
+	result.push_back(currentString);
+
+	return result;
+}
 
 // Creation, Rendering & Cleanup
 class Renderer
@@ -66,6 +74,8 @@ class Renderer
 	float farPlane;
 	float aspectRatio;
 
+	SCENE_DATA sceneData;
+
 	std::chrono::steady_clock::time_point pastTime;
 	std::chrono::steady_clock::time_point nowTime;
 
@@ -74,9 +84,10 @@ class Renderer
 	Microsoft::WRL::ComPtr<ID3D12Resource>		vertexBuffer;
 	Microsoft::WRL::ComPtr<ID3D12RootSignature>	rootSignature;
 	Microsoft::WRL::ComPtr<ID3D12PipelineState>	pipeline;
+
+	H2B::Parser parser;
 public:
-	std::vector<DirectX::XMMATRIX> meshes;
-	std::vector<std::string> meshNames;
+	std::vector<Model> models;
 
 	Renderer(GW::SYSTEM::GWindow _win, GW::GRAPHICS::GDirectX12Surface _d3d)
 	{
@@ -136,6 +147,13 @@ public:
 		projectionMatrix.r[2] = {0, 0, farPlane / (farPlane - nearPlane), 1};
 		projectionMatrix.r[3] = {0, 0, -(farPlane * nearPlane) / (farPlane - nearPlane), 0};
 
+		sceneData.sunDirection = { -1, -1, 2, 0 };
+		sceneData.sunDirection = DirectX::XMVector4Normalize(sceneData.sunDirection);
+		sceneData.sunColor = { .9f, .9f, 1, 1 };
+		sceneData.viewMatrix = viewMatrix;
+		sceneData.projectionMatrix = projectionMatrix;
+		sceneData.sunAmbient = { .25f, .25f, .35f };
+
 		// Create Vertex Buffer
 		Vertex verts[104];
 
@@ -163,13 +181,17 @@ public:
 		vertexView.BufferLocation = vertexBuffer->GetGPUVirtualAddress();
 		vertexView.StrideInBytes = sizeof(Vertex);
 		vertexView.SizeInBytes = sizeof(verts);
+
+		//create the constant buffer for the mesh and scene data
+		
+
 		// Create Vertex Shader
 		UINT compilerFlags = D3DCOMPILE_ENABLE_STRICTNESS;
 #if _DEBUG
 		compilerFlags |= D3DCOMPILE_DEBUG;
 #endif
-		std::string pixelShader = ShaderAsString("PixelShader.hlsl");
-		std::string vertexShader = ShaderAsString("VertexShader.hlsl");
+		std::string pixelShader = ShaderAsString("../PixelShader.hlsl");
+		std::string vertexShader = ShaderAsString("../VertexShader.hlsl");
 
 		Microsoft::WRL::ComPtr<ID3DBlob> vsBlob, errors;
 		if (FAILED(D3DCompile(vertexShader.c_str(), strlen(vertexShader.c_str()),
@@ -191,8 +213,18 @@ public:
 		// Create Input Layout
 		D3D12_INPUT_ELEMENT_DESC format[] = 
 		{
-			{"POSITION", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
+			{"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
+			{"COLOR", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
+			{"NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 24, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0}
 		};
+
+		CD3DX12_ROOT_PARAMETER rootParams[2];
+
+		rootParams[0].InitAsConstantBufferView(0);
+		rootParams[1].InitAsConstantBufferView(1);
+
+		CD3DX12_ROOT_SIGNATURE_DESC rootDesc;
+		rootDesc.Init(2, rootParams, 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
 
 		CD3DX12_ROOT_PARAMETER rootParam;
 		rootParam.InitAsConstants(48, 0);
@@ -200,11 +232,13 @@ public:
 		CD3DX12_ROOT_SIGNATURE_DESC rootSignatureDesc;
 		rootSignatureDesc.Init(1, &rootParam, 0, nullptr, 
 			D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+
 		Microsoft::WRL::ComPtr<ID3DBlob> signature;
-		D3D12SerializeRootSignature(&rootSignatureDesc, 
+		D3D12SerializeRootSignature(&rootDesc, 
 			D3D_ROOT_SIGNATURE_VERSION_1, &signature, &errors);
 		creator->CreateRootSignature(0, signature->GetBufferPointer(), 
 			signature->GetBufferSize(), IID_PPV_ARGS(&rootSignature));
+
 		// create pipeline state
 		D3D12_GRAPHICS_PIPELINE_STATE_DESC psDesc;
 		ZeroMemory(&psDesc, sizeof(D3D12_GRAPHICS_PIPELINE_STATE_DESC));
@@ -226,6 +260,8 @@ public:
 		creator->Release();
 
 		pastTime = std::chrono::high_resolution_clock::now();
+
+		ParseData();
 	}
 	void Render()
 	{
@@ -240,13 +276,24 @@ public:
 		cmd->SetGraphicsRootSignature(rootSignature.Get());
 		cmd->OMSetRenderTargets(1, &rtv, FALSE, &dsv);
 		cmd->SetPipelineState(pipeline.Get());
-
-		// now we can draw
-		cmd->IASetVertexBuffers(0, 1, &vertexView);
-
 		cmd->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_LINELIST);
+		// now we can draw
+		for (int i = 0; i < models.size(); i++)
+		{
+			cmd->IASetVertexBuffers(0, 1, &(models[i].vertexView));
+			cmd->IASetIndexBuffer(&(models[i].indexView));
 
-		
+			cmd->SetDescriptorHeaps(1, models[i].descriptorHeap);
+
+			cmd->SetGraphicsRootConstantBufferView(0, models[i].constantBuffer.Get()->GetGPUVirtualAddress());
+			for (int j = 0; j < models[i].meshCount; j++)
+			{
+				cmd->SetGraphicsRootConstantBufferView(1, models[i].constantBuffer.Get()->GetGPUVirtualAddress() + sizeof(sceneData) + sizeof(MESH_DATA) * j);
+				cmd->DrawIndexedInstanced(models[i].meshes[j].drawInfo.indexCount, 1, models[i].meshes[j].drawInfo.indexOffset, 0, 0);
+			}
+		}
+
+	/*
 #pragma region drawGrid
 		SHADER_VARS shaderVars = { worldMatrixFloor, viewMatrix, projectionMatrix };
 		cmd->SetGraphicsRoot32BitConstants(0, 48, &shaderVars, 0);
@@ -272,7 +319,7 @@ public:
 		cmd->SetGraphicsRoot32BitConstants(0, 48, &shaderVars, 0);
 		cmd->DrawInstanced(104, 1, 0, 0);
 #pragma endregion
-
+*/
 
 		// release temp handles
 		cmd->Release();
@@ -358,5 +405,178 @@ public:
 	~Renderer()
 	{
 		// ComPtr will auto release so nothing to do here 
+	}
+
+	void ParseData()
+	{
+		std::ifstream inputStream;
+		inputStream.open("../GameLevel.txt");
+
+		if (inputStream.is_open())
+		{
+			std::string lineInfo = "";
+			std::string objName = "";
+
+			while (true)
+			{
+				std::getline(inputStream, lineInfo);
+
+				if (lineInfo.compare("MESH") == 0)
+				{
+					DirectX::XMMATRIX newMesh;
+
+					std::getline(inputStream, objName);
+					int periodPos = objName.find_last_of('.');
+					if (periodPos != -1)
+						objName.erase(periodPos);
+					objName.append(".h2b");
+
+					DirectX::XMVECTOR vector;
+					std::string stringVector;
+					std::string extractedNumber;
+					std::vector<std::string> coordinates;
+
+					std::getline(inputStream, lineInfo);
+					stringVector = lineInfo;
+					stringVector = stringVector.substr(13, 256);
+					stringVector.erase(stringVector.length() - 1);
+					coordinates = SplitString(stringVector, ',');
+					newMesh.r[0] = { std::stof(coordinates[0]), std::stof(coordinates[1]), std::stof(coordinates[2]), std::stof(coordinates[3]) };
+
+					std::getline(inputStream, lineInfo);
+					stringVector = lineInfo;
+					stringVector = stringVector.substr(13, 256);
+					stringVector.erase(stringVector.length() - 1);
+					coordinates = SplitString(stringVector, ',');
+					newMesh.r[1] = { std::stof(coordinates[0]), std::stof(coordinates[1]), std::stof(coordinates[2]), std::stof(coordinates[3]) };
+
+					std::getline(inputStream, lineInfo);
+					stringVector = lineInfo;
+					stringVector = stringVector.substr(13, 256);
+					stringVector.erase(stringVector.length() - 1);
+					coordinates = SplitString(stringVector, ',');
+					newMesh.r[2] = { std::stof(coordinates[0]), std::stof(coordinates[1]), std::stof(coordinates[2]), std::stof(coordinates[3]) };
+
+					std::getline(inputStream, lineInfo);
+					stringVector = lineInfo;
+					stringVector = stringVector.substr(13, 256);
+					stringVector.erase(stringVector.length() - 1);
+					stringVector.erase(stringVector.length() - 1);
+					coordinates = SplitString(stringVector, ',');
+					newMesh.r[3] = { std::stof(coordinates[0]), std::stof(coordinates[1]), std::stof(coordinates[2]), std::stof(coordinates[3]) };
+
+					objName = "../Models/" + objName;
+
+					if (parser.Parse(objName.c_str()))
+					{
+						Model model;
+						
+						model.meshData.world = newMesh;
+
+						//index buffer
+						model.indexCount = parser.indexCount;
+						model.indices = parser.indices;
+						ID3D12Device* creator;
+						d3d.GetDevice((void**)&creator);
+
+						creator->CreateCommittedResource( // using UPLOAD heap for simplicity
+							&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD), // DEFAULT recommend  
+							D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Buffer(sizeof(unsigned int) * model.indices.size()),
+							D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&(model.indexBuffer)));
+						// Transfer triangle data to the index buffer.
+						UINT8* memoryLocation;
+						model.indexBuffer->Map(0, &CD3DX12_RANGE(0, 0),
+							reinterpret_cast<void**>(&memoryLocation));
+						memcpy(memoryLocation, model.indices.data(), sizeof(unsigned int) * model.indices.size());
+						model.indexBuffer->Unmap(0, nullptr);
+						// Create a index View to send to a Draw() call.
+						model.indexView.BufferLocation = model.indexBuffer->GetGPUVirtualAddress();
+						model.indexView.SizeInBytes = sizeof(unsigned int) * model.indices.size(); // TODO: Part 1d
+						model.indexView.Format = DXGI_FORMAT_R32_UINT;
+
+						//create the vertex buffer
+						model.vertexCount = parser.vertexCount;
+						model.vertices = parser.vertices;
+						creator->CreateCommittedResource( // using UPLOAD heap for simplicity
+							&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD), // DEFAULT recommend  
+							D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Buffer(sizeof(H2B::VERTEX) * model.vertices.size()),
+							D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&(model.vertexBuffer)));
+						// Transfer triangle data to the vertex buffer.
+						UINT8* transferMemoryLocation;
+						model.vertexBuffer->Map(0, &CD3DX12_RANGE(0, 0),
+							reinterpret_cast<void**>(&transferMemoryLocation));
+						memcpy(transferMemoryLocation, model.vertices.data(), sizeof(H2B::VERTEX) * model.vertices.size());
+						model.vertexBuffer->Unmap(0, nullptr);
+						// Create a vertex View to send to a Draw() call.
+						model.vertexView.BufferLocation = model.vertexBuffer->GetGPUVirtualAddress();
+						model.vertexView.StrideInBytes = sizeof(H2B::VERTEX); // TODO: Part 1e
+						model.vertexView.SizeInBytes = sizeof(H2B::VERTEX) * model.vertices.size(); // TODO: Part 1d
+
+						model.materialCount = parser.materialCount;
+						model.materials = parser.materials;
+
+						model.meshCount = parser.meshCount;
+						model.meshes = parser.meshes;
+
+						//constant buffer
+						IDXGISwapChain4* swapChain;
+						DXGI_SWAP_CHAIN_DESC swapChainDesc;
+						d3d.GetSwapchain4((void**)&swapChain);
+						swapChain->GetDesc(&swapChainDesc);
+						unsigned int bufferByteSize = (sizeof(sceneData) + model.meshCount * sizeof(MESH_DATA)) * swapChainDesc.BufferCount;
+						creator->CreateCommittedResource( // using UPLOAD heap for simplicity
+							&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD), // DEFAULT recommend  
+							D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Buffer(bufferByteSize),
+							D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&(model.constantBuffer)));
+						// Transfer triangle data to the index buffer.
+						UINT8* constantBufferMemoryLocation;
+						model.constantBuffer->Map(0, &CD3DX12_RANGE(0, 0),
+							reinterpret_cast<void**>(&constantBufferMemoryLocation));
+						memcpy(constantBufferMemoryLocation, &sceneData, sizeof(sceneData));
+						constantBufferMemoryLocation += sizeof(sceneData);
+						for (int i = 0; i < model.meshCount; i++)
+						{
+							model.meshData.material = model.materials[i].attrib;
+							memcpy(constantBufferMemoryLocation, &model.meshData.material, sizeof(MESH_DATA));
+							constantBufferMemoryLocation += sizeof(MESH_DATA);
+						}
+
+						model.constantBuffer->Unmap(0, nullptr);
+
+						D3D12_DESCRIPTOR_HEAP_DESC descriptorHeapDesc{};
+						descriptorHeapDesc.NumDescriptors = swapChainDesc.BufferCount;
+						descriptorHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+						descriptorHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+
+						creator->CreateDescriptorHeap(&descriptorHeapDesc, IID_PPV_ARGS(&(model.descriptorHeap[0])));
+
+						D3D12_CONSTANT_BUFFER_VIEW_DESC bufferDesc;
+						bufferDesc.BufferLocation = model.constantBuffer.Get()->GetGPUVirtualAddress();
+						bufferDesc.SizeInBytes = bufferByteSize;
+
+						D3D12_CPU_DESCRIPTOR_HANDLE descriptorHandle = model.descriptorHeap[0]->GetCPUDescriptorHandleForHeapStart();
+
+						creator->CreateConstantBufferView(&bufferDesc, descriptorHandle);
+
+						models.push_back(model);
+					}
+
+					std::cout << objName << std::endl;
+					for (int i = 0; i < 4; i++)
+					{
+						std::cout << DirectX::XMVectorGetX(newMesh.r[i]) << ' ' << DirectX::XMVectorGetY(newMesh.r[i]) << ' ' << DirectX::XMVectorGetZ(newMesh.r[i]) << ' ' << DirectX::XMVectorGetW(newMesh.r[i]) << ' ' << std::endl;
+					}
+				}
+
+				std::cout << std::endl;
+
+				if (inputStream.eof())
+				{
+					break;
+				}
+			}
+
+			inputStream.close();
+		}
 	}
 };

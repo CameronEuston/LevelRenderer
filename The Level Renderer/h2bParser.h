@@ -3,6 +3,7 @@
 #include <fstream>
 #include <vector>
 #include <set>
+#include "defines.h"
 
 namespace H2B {
 
@@ -55,8 +56,8 @@ namespace H2B {
 		std::vector<VERTEX> vertices;
 		std::vector<unsigned> indices;
 		std::vector<MATERIAL> materials;
-		std::vector<BATCH> batches;
 		std::vector<MESH> meshes;
+		std::vector<BATCH> batches;
 		bool Parse(const char* h2bPath)
 		{
 			Clear();
