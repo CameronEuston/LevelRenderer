@@ -58,13 +58,6 @@ class Renderer
 	GW::INPUT::GInput input;
 	GW::INPUT::GController controller;
 
-	DirectX::XMMATRIX worldMatrixFloor;
-	DirectX::XMMATRIX worldMatrixWall1;
-	DirectX::XMMATRIX worldMatrixWall2;
-	DirectX::XMMATRIX worldMatrixWall3;
-	DirectX::XMMATRIX worldMatrixWall4;
-	DirectX::XMMATRIX worldMatrixCeiling;
-
 	DirectX::XMMATRIX viewMatrix;
 
 	DirectX::XMMATRIX projectionMatrix;
@@ -80,8 +73,6 @@ class Renderer
 	std::chrono::steady_clock::time_point nowTime;
 
 	// what we need at a minimum to draw a triangle
-	D3D12_VERTEX_BUFFER_VIEW					vertexView;
-	Microsoft::WRL::ComPtr<ID3D12Resource>		vertexBuffer;
 	Microsoft::WRL::ComPtr<ID3D12RootSignature>	rootSignature;
 	Microsoft::WRL::ComPtr<ID3D12PipelineState>	pipeline;
 
@@ -98,33 +89,6 @@ public:
 
 		input.Create(win);
 		controller.Create();
-
-#pragma region grids
-
-		worldMatrixFloor = DirectX::XMMatrixIdentity();
-		worldMatrixFloor = DirectX::XMMatrixMultiply(worldMatrixFloor, DirectX::XMMatrixRotationX(90 * pi / 180));
-		worldMatrixFloor = DirectX::XMMatrixMultiply(worldMatrixFloor, DirectX::XMMatrixTranslation(0, -.5f, 0));
-
-		worldMatrixWall1 = DirectX::XMMatrixIdentity();
-		worldMatrixWall1 = DirectX::XMMatrixMultiply(worldMatrixWall1, DirectX::XMMatrixTranslation(0, 0, -.5f));
-		//worldMatrixWall1 = DirectX::XMMatrixMultiply(worldMatrixWall1, DirectX::XMMatrixRotationX(90 * pi / 180));
-
-		worldMatrixWall2 = DirectX::XMMatrixIdentity();
-		worldMatrixWall2 = DirectX::XMMatrixMultiply(worldMatrixWall2, DirectX::XMMatrixRotationY(90 * pi / 180));
-		worldMatrixWall2 = DirectX::XMMatrixMultiply(worldMatrixWall2, DirectX::XMMatrixTranslation(-.5f, 0, 0));
-
-		worldMatrixWall3 = DirectX::XMMatrixIdentity();
-		worldMatrixWall3 = DirectX::XMMatrixMultiply(worldMatrixWall3, DirectX::XMMatrixRotationY(90 * pi / 180));
-		worldMatrixWall3 = DirectX::XMMatrixMultiply(worldMatrixWall3, DirectX::XMMatrixTranslation(.5f, 0, 0));
-
-		worldMatrixWall4 = DirectX::XMMatrixIdentity();
-		worldMatrixWall4 = DirectX::XMMatrixMultiply(worldMatrixWall4, DirectX::XMMatrixTranslation(0, 0, .5f));
-		//worldMatrixWall4 = DirectX::XMMatrixMultiply(worldMatrixWall4, DirectX::XMMatrixRotationX(90 * pi / 180));
-
-		worldMatrixCeiling = DirectX::XMMatrixIdentity();
-		worldMatrixCeiling = DirectX::XMMatrixMultiply(worldMatrixCeiling, DirectX::XMMatrixRotationX(90 * pi / 180));
-		worldMatrixCeiling = DirectX::XMMatrixMultiply(worldMatrixCeiling, DirectX::XMMatrixTranslation(0, .5f, 0));
-#pragma endregion
 
 
 		viewMatrix = DirectX::XMMatrixIdentity();
@@ -153,37 +117,6 @@ public:
 		sceneData.viewMatrix = viewMatrix;
 		sceneData.projectionMatrix = projectionMatrix;
 		sceneData.sunAmbient = { .25f, .25f, .35f };
-
-		// Create Vertex Buffer
-		Vertex verts[104];
-
-		for (int i = 0; i < 52; i += 2)
-		{
-			verts[i] = {-0.5f, i / 50.0f - 0.5f, 0, 1};
-			verts[i + 1] = {0.5f, i / 50.0f - 0.5f, 0, 1};
-
-			verts[i + 52] = {i / 50.0f - 0.5f, -0.5f, 0, 1};
-			verts[i + 53] = { i / 50.0f - 0.5f, 0.5f, 0, 1 };;
-		}
-
-		creator->CreateCommittedResource( // using UPLOAD heap for simplicity
-			&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD), // DEFAULT recommend  
-			D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Buffer(sizeof(verts)),
-			D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&vertexBuffer));
-		// Transfer triangle data to the vertex buffer.
-		UINT8* transferMemoryLocation;
-		vertexBuffer->Map(0, &CD3DX12_RANGE(0, 0),
-			reinterpret_cast<void**>(&transferMemoryLocation));
-		memcpy(transferMemoryLocation, verts, sizeof(verts));
-		vertexBuffer->Unmap(0, nullptr);
-
-		// Create a vertex View to send to a Draw() call.
-		vertexView.BufferLocation = vertexBuffer->GetGPUVirtualAddress();
-		vertexView.StrideInBytes = sizeof(Vertex);
-		vertexView.SizeInBytes = sizeof(verts);
-
-		//create the constant buffer for the mesh and scene data
-		
 
 		// Create Vertex Shader
 		UINT compilerFlags = D3DCOMPILE_ENABLE_STRICTNESS;
@@ -250,7 +183,7 @@ public:
 		psDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
 		psDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
 		psDesc.SampleMask = UINT_MAX;
-		psDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_LINE;
+		psDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
 		psDesc.NumRenderTargets = 1;
 		psDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
 		psDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
@@ -276,10 +209,16 @@ public:
 		cmd->SetGraphicsRootSignature(rootSignature.Get());
 		cmd->OMSetRenderTargets(1, &rtv, FALSE, &dsv);
 		cmd->SetPipelineState(pipeline.Get());
-		cmd->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_LINELIST);
+		cmd->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 		// now we can draw
 		for (int i = 0; i < models.size(); i++)
 		{
+			UINT8* constantBufferMemoryLocation;
+			models[i].constantBuffer->Map(0, &CD3DX12_RANGE(0, 0),
+				reinterpret_cast<void**>(&constantBufferMemoryLocation));
+			memcpy(constantBufferMemoryLocation, &sceneData, sizeof(sceneData));
+			models[i].constantBuffer->Unmap(0, nullptr);
+
 			cmd->IASetVertexBuffers(0, 1, &(models[i].vertexView));
 			cmd->IASetIndexBuffer(&(models[i].indexView));
 
@@ -288,38 +227,10 @@ public:
 			cmd->SetGraphicsRootConstantBufferView(0, models[i].constantBuffer.Get()->GetGPUVirtualAddress());
 			for (int j = 0; j < models[i].meshCount; j++)
 			{
-				cmd->SetGraphicsRootConstantBufferView(1, models[i].constantBuffer.Get()->GetGPUVirtualAddress() + sizeof(sceneData) + sizeof(MESH_DATA) * j);
+				cmd->SetGraphicsRootConstantBufferView(1, models[i].constantBuffer.Get()->GetGPUVirtualAddress() + sizeof(sceneData) + (sizeof(MESH_DATA) * j));
 				cmd->DrawIndexedInstanced(models[i].meshes[j].drawInfo.indexCount, 1, models[i].meshes[j].drawInfo.indexOffset, 0, 0);
 			}
 		}
-
-	/*
-#pragma region drawGrid
-		SHADER_VARS shaderVars = { worldMatrixFloor, viewMatrix, projectionMatrix };
-		cmd->SetGraphicsRoot32BitConstants(0, 48, &shaderVars, 0);
-		cmd->DrawInstanced(104, 1, 0, 0);
-
-		shaderVars = { worldMatrixWall1, viewMatrix, projectionMatrix };
-		cmd->SetGraphicsRoot32BitConstants(0, 48, &shaderVars, 0);
-		cmd->DrawInstanced(104, 1, 0, 0);
-
-		shaderVars = { worldMatrixWall2, viewMatrix, projectionMatrix };
-		cmd->SetGraphicsRoot32BitConstants(0, 48, &shaderVars, 0);
-		cmd->DrawInstanced(104, 1, 0, 0);
-
-		shaderVars = { worldMatrixWall3, viewMatrix, projectionMatrix };
-		cmd->SetGraphicsRoot32BitConstants(0, 48, &shaderVars, 0);
-		cmd->DrawInstanced(104, 1, 0, 0);
-
-		shaderVars = { worldMatrixWall4, viewMatrix, projectionMatrix };
-		cmd->SetGraphicsRoot32BitConstants(0, 48, &shaderVars, 0);
-		cmd->DrawInstanced(104, 1, 0, 0);
-
-		shaderVars = { worldMatrixCeiling, viewMatrix, projectionMatrix };
-		cmd->SetGraphicsRoot32BitConstants(0, 48, &shaderVars, 0);
-		cmd->DrawInstanced(104, 1, 0, 0);
-#pragma endregion
-*/
 
 		// release temp handles
 		cmd->Release();
@@ -400,6 +311,8 @@ public:
 		viewMatrix.r[3] = position;
 		viewMatrix = DirectX::XMMatrixInverse(&determinant, viewMatrix);
 
+		sceneData.viewMatrix = viewMatrix;
+
 		pastTime = nowTime;
 	}
 	~Renderer()
@@ -467,8 +380,9 @@ public:
 
 					objName = "../Models/" + objName;
 
-					if (parser.Parse(objName.c_str()))
+					if (parser.Parse(objName.c_str()) && objName == "../Models/Triceratops.h2b")
 					{
+
 						Model model;
 						
 						model.meshData.world = newMesh;
@@ -494,7 +408,7 @@ public:
 						model.indexView.SizeInBytes = sizeof(unsigned int) * model.indices.size(); // TODO: Part 1d
 						model.indexView.Format = DXGI_FORMAT_R32_UINT;
 
-						//create the vertex buffer
+						//create the vertex buffer (green check)
 						model.vertexCount = parser.vertexCount;
 						model.vertices = parser.vertices;
 						creator->CreateCommittedResource( // using UPLOAD heap for simplicity
@@ -537,7 +451,7 @@ public:
 						for (int i = 0; i < model.meshCount; i++)
 						{
 							model.meshData.material = model.materials[i].attrib;
-							memcpy(constantBufferMemoryLocation, &model.meshData.material, sizeof(MESH_DATA));
+							memcpy(constantBufferMemoryLocation, &model.meshData, sizeof(MESH_DATA));
 							constantBufferMemoryLocation += sizeof(MESH_DATA);
 						}
 
