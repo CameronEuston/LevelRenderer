@@ -1,7 +1,7 @@
 # Blender MTL File: 'None'
 # Material Count: 3
 
-newmtl Brown
+newmtl Brown.003
 Ns 96.078421
 Ka 1.000000 1.000000 1.000000
 Kd 0.106288 0.076700 0.044055
@@ -11,7 +11,7 @@ Ni 1.000000
 d 1.000000
 illum 2
 
-newmtl LightBrown
+newmtl LightBrown.003
 Ns 96.078421
 Ka 1.000000 1.000000 1.000000
 Kd 0.171224 0.136237 0.100250
@@ -21,7 +21,7 @@ Ni 1.000000
 d 1.000000
 illum 2
 
-newmtl Purple
+newmtl Purple.005
 Ns 96.078421
 Ka 1.000000 1.000000 1.000000
 Kd 0.058239 0.057581 0.069709

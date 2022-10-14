@@ -90,6 +90,11 @@ public:
 		input.Create(win);
 		controller.Create();
 
+		sceneData.sunDirection = { -1, -1, 2 };
+		sceneData.sunDirection = DirectX::XMVector3Normalize(sceneData.sunDirection);
+
+		sceneData.sunColor = { .9f * 10, .9f * 10, 1 * 10, 1};
+		sceneData.sunAmbient = { .25f * 2, .25f * 2, .35f * 2 };
 
 		viewMatrix = DirectX::XMMatrixIdentity();
 		viewMatrix = DirectX::XMMatrixMultiply(viewMatrix, DirectX::XMMatrixTranslation(0, 0, 0));
@@ -248,7 +253,7 @@ public:
 		float yChange = 0;
 		float xChange = 0;
 		float zChange = 0;
-		const float Camera_Speed = .3f;
+		const float Camera_Speed = 1.0f;
 
 		float space = 0;
 		float leftShift = 0;
@@ -268,7 +273,12 @@ public:
 		float stickButton = 0;
 		unsigned int screenHeight = 0;
 		unsigned int screenWidth = 0;
-		input.GetMouseDelta(mouseX, mouseY);
+		
+		if (input.GetMouseDelta(mouseX, mouseY) == GW::GReturn::REDUNDANT)
+		{
+			mouseX = 0;
+			mouseY = 0;
+		}
 		win.GetHeight(screenHeight);
 		win.GetWidth(screenWidth);
 		float thumbSpeed = pi * duration.count();
@@ -293,6 +303,7 @@ public:
 		float downY = max(stickButton, leftTrigger);
 		yChange = (space - leftShift + upY - downY) * Camera_Speed * duration.count();
 		zChange = (w - s + leftStickY) * Camera_Speed * duration.count();
+
 		float totalPitch = verticalFOV * mouseY / screenHeight + rightStickY * -thumbSpeed;
 		float totalYaw = verticalFOV * mouseX / screenWidth + rightStickX * thumbSpeed;
 
@@ -312,6 +323,7 @@ public:
 		viewMatrix = DirectX::XMMatrixInverse(&determinant, viewMatrix);
 
 		sceneData.viewMatrix = viewMatrix;
+		//sceneData.camPos = viewMatrix.r[3];
 
 		pastTime = nowTime;
 	}
@@ -380,7 +392,7 @@ public:
 
 					objName = "../Models/" + objName;
 
-					if (parser.Parse(objName.c_str()) && objName == "../Models/Triceratops.h2b")
+					if (parser.Parse(objName.c_str()))
 					{
 
 						Model model;
