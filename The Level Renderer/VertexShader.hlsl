@@ -69,8 +69,8 @@ PS_INPUT main(VS_INPUT input)
     output.posH = mul(output.posH, cameraAndLights.viewMatrix);
     output.posH = mul(output.posH, cameraAndLights.projectionMatrix);
 	
-    output.posW = mul(output.posW, meshInfo.world);
-    output.nrmW = mul(output.nrmW, meshInfo.world);
+    output.posW = mul(float4(output.posW, 1), meshInfo.world).xyz;
+    output.nrmW = mul(float4(output.nrmW, 0), meshInfo.world).xyz;
 	
     return output;
 	// TODO: Part 4b

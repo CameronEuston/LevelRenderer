@@ -46,17 +46,21 @@ ConstantBuffer<MESH_DATA> meshInfo : register(b1, Space0);
 
 float4 main(PS_INPUT input) : SV_TARGET
 {
+    input.nrmW = normalize(input.nrmW);
+  
 	// TODO: Part 3a
     float4 finalColor = float4(0, 0, 0, 0);
-    float4 diffuse = float4(meshInfo.material.Kd, 1);
+    float4 diffuse = float4(meshInfo.material.Kd, meshInfo.material.d);
     float lightRatio = clamp(dot(cameraAndLights.sunDirection.xyz * -1, input.nrmW), 0.0f, 1.0f);
     
-    float3 viewDirection = normalize(float3(cameraAndLights.camPos.x, cameraAndLights.camPos.y, cameraAndLights.camPos.z) - input.posW);
+    float expo = meshInfo.material.Ns == 0 ? 96 : meshInfo.material.Ns;
+    
+    float3 viewDirection = normalize(cameraAndLights.camPos.xyz - input.posW);
     float3 halfVector = normalize(cameraAndLights.sunDirection.xyz * -1 + viewDirection);
-    float intensity = max(pow(saturate(dot(input.nrmW, halfVector.xyz)), meshInfo.material.Ns), 0);
-    float reflectedLight = cameraAndLights.sunColor.xyz * meshInfo.material.Ks * intensity;
+    float intensity = max(pow(saturate(dot(input.nrmW, halfVector.xyz)), expo), 0);
+    float3 reflectedLight = cameraAndLights.sunColor.xyz * meshInfo.material.Ks * intensity;
 	
-    finalColor = (lightRatio * cameraAndLights.sunColor + cameraAndLights.sunAmbient) * diffuse + reflectedLight;
+    finalColor = (lightRatio * cameraAndLights.sunColor + cameraAndLights.sunAmbient) * diffuse + float4(reflectedLight, 0);
 	
     return float4(finalColor); 
 }

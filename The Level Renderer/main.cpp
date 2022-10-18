@@ -37,7 +37,7 @@ int main()
 	if (+win.Create(0, 0, 800, 600, GWindowStyle::WINDOWEDBORDERED))
 	{
 		// TODO: Part 1a
-		float clr[] = { 255/255.0f, 150/255.0f, 55/255.0f, 1 }; // start with a jade color
+		float clr[] = { 135/255.0f, 206/255.0f, 235/255.0f, 1 }; // start with a jade color
 		msgs.Create([&](const GW::GEvent& e) {
 			GW::SYSTEM::GWindow::Events q;
 			//if (+e.Read(q) && q == GWindow::Events::RESIZE)

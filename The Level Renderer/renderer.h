@@ -77,6 +77,8 @@ class Renderer
 	Microsoft::WRL::ComPtr<ID3D12PipelineState>	pipeline;
 
 	H2B::Parser parser;
+	Model skybox;
+
 public:
 	std::vector<Model> models;
 
@@ -89,12 +91,6 @@ public:
 
 		input.Create(win);
 		controller.Create();
-
-		sceneData.sunDirection = { -1, -1, 2 };
-		sceneData.sunDirection = DirectX::XMVector3Normalize(sceneData.sunDirection);
-
-		sceneData.sunColor = { .9f * 10, .9f * 10, 1 * 10, 1};
-		sceneData.sunAmbient = { .25f * 2, .25f * 2, .35f * 2 };
 
 		viewMatrix = DirectX::XMMatrixIdentity();
 		viewMatrix = DirectX::XMMatrixMultiply(viewMatrix, DirectX::XMMatrixTranslation(0, 0, 0));
@@ -118,10 +114,11 @@ public:
 
 		sceneData.sunDirection = { -1, -1, 2, 0 };
 		sceneData.sunDirection = DirectX::XMVector4Normalize(sceneData.sunDirection);
-		sceneData.sunColor = { .9f, .9f, 1, 1 };
+		sceneData.sunColor = { .9f, .9f, 1.0f, 1 };
 		sceneData.viewMatrix = viewMatrix;
 		sceneData.projectionMatrix = projectionMatrix;
-		sceneData.sunAmbient = { .25f, .25f, .35f };
+		sceneData.sunAmbient = { .25f, .25f, .35f, 1};
+		sceneData.camPos = { 0, 0, 0, 0 };
 
 		// Create Vertex Shader
 		UINT compilerFlags = D3DCOMPILE_ENABLE_STRICTNESS;
@@ -200,6 +197,8 @@ public:
 		pastTime = std::chrono::high_resolution_clock::now();
 
 		ParseData();
+
+		CreateSkyBox(skybox);
 	}
 	void Render()
 	{
@@ -253,7 +252,7 @@ public:
 		float yChange = 0;
 		float xChange = 0;
 		float zChange = 0;
-		const float Camera_Speed = 1.0f;
+		const float Camera_Speed = 3.0f;
 
 		float space = 0;
 		float leftShift = 0;
@@ -307,23 +306,27 @@ public:
 		float totalPitch = verticalFOV * mouseY / screenHeight + rightStickY * -thumbSpeed;
 		float totalYaw = verticalFOV * mouseX / screenWidth + rightStickX * thumbSpeed;
 
-		viewMatrix = DirectX::XMMatrixMultiply(viewMatrix, DirectX::XMMatrixTranslation(0, yChange, 0));
+		DirectX::XMVECTOR worldTranslation = { 0, yChange, 0 };
+		viewMatrix.r[3] = DirectX::XMVectorAdd(viewMatrix.r[3], worldTranslation);
 		
 	
 		//inversing back into view space
 		viewMatrix = DirectX::XMMatrixInverse(&determinant, viewMatrix);
 
-		viewMatrix = DirectX::XMMatrixMultiply(viewMatrix, DirectX::XMMatrixTranslation(-xChange, 0, -zChange));
+		DirectX::XMVECTOR localTranslation = { -xChange, 0, -zChange };
+		viewMatrix.r[3] = DirectX::XMVectorAdd(viewMatrix.r[3], localTranslation);
+
 		viewMatrix = DirectX::XMMatrixMultiply(viewMatrix, DirectX::XMMatrixRotationX(-totalPitch));
 		
 		viewMatrix = DirectX::XMMatrixInverse(&determinant, viewMatrix);
 		DirectX::XMVECTOR position = viewMatrix.r[3];
 		viewMatrix = DirectX::XMMatrixMultiply(viewMatrix, DirectX::XMMatrixRotationY(totalYaw));
 		viewMatrix.r[3] = position;
+		sceneData.camPos = position;
 		viewMatrix = DirectX::XMMatrixInverse(&determinant, viewMatrix);
 
 		sceneData.viewMatrix = viewMatrix;
-		//sceneData.camPos = viewMatrix.r[3];
+		
 
 		pastTime = nowTime;
 	}
@@ -485,6 +488,8 @@ public:
 						creator->CreateConstantBufferView(&bufferDesc, descriptorHandle);
 
 						models.push_back(model);
+
+						creator->Release();
 					}
 
 					std::cout << objName << std::endl;
@@ -504,5 +509,99 @@ public:
 
 			inputStream.close();
 		}
+	}
+
+	void CreateSkyBox(Model& skybox)
+	{
+		skybox.meshData.world = DirectX::XMMatrixIdentity();
+		skybox.meshData.world.r[3] = sceneData.camPos;
+
+		//index buffer
+		skybox.indexCount = 36;
+		skybox.indices = parser.indices;
+		ID3D12Device* creator;
+		d3d.GetDevice((void**)&creator);
+
+		creator->CreateCommittedResource( // using UPLOAD heap for simplicity
+			&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD), // DEFAULT recommend  
+			D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Buffer(sizeof(unsigned int) * skybox.indices.size()),
+			D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&(skybox.indexBuffer)));
+		// Transfer triangle data to the index buffer.
+		UINT8* memoryLocation;
+		skybox.indexBuffer->Map(0, &CD3DX12_RANGE(0, 0),
+			reinterpret_cast<void**>(&memoryLocation));
+		memcpy(memoryLocation, skybox.indices.data(), sizeof(unsigned int) * skybox.indices.size());
+		skybox.indexBuffer->Unmap(0, nullptr);
+		// Create a index View to send to a Draw() call.
+		skybox.indexView.BufferLocation = skybox.indexBuffer->GetGPUVirtualAddress();
+		skybox.indexView.SizeInBytes = sizeof(unsigned int) * skybox.indices.size(); // TODO: Part 1d
+		skybox.indexView.Format = DXGI_FORMAT_R32_UINT;
+
+		//create the vertex buffer
+		float skyboxScale;
+		skybox.vertexCount = 8;
+		skybox.vertices = 
+		{
+			{{-.5f, -.5f, -.5f, 1}, {}}
+		};
+		creator->CreateCommittedResource( // using UPLOAD heap for simplicity
+			&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD), // DEFAULT recommend  
+			D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Buffer(sizeof(H2B::VERTEX) * skybox.vertices.size()),
+			D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&(skybox.vertexBuffer)));
+		// Transfer triangle data to the vertex buffer.
+		UINT8* transferMemoryLocation;
+		skybox.vertexBuffer->Map(0, &CD3DX12_RANGE(0, 0),
+			reinterpret_cast<void**>(&transferMemoryLocation));
+		memcpy(transferMemoryLocation, skybox.vertices.data(), sizeof(H2B::VERTEX) * skybox.vertices.size());
+		skybox.vertexBuffer->Unmap(0, nullptr);
+		// Create a vertex View to send to a Draw() call.
+		skybox.vertexView.BufferLocation = skybox.vertexBuffer->GetGPUVirtualAddress();
+		skybox.vertexView.StrideInBytes = sizeof(H2B::VERTEX); // TODO: Part 1e
+		skybox.vertexView.SizeInBytes = sizeof(H2B::VERTEX) * skybox.vertices.size(); // TODO: Part 1d
+
+		skybox.materialCount = 1;
+
+		skybox.meshCount = 1;
+
+		//constant buffer
+		IDXGISwapChain4* swapChain;
+		DXGI_SWAP_CHAIN_DESC swapChainDesc;
+		d3d.GetSwapchain4((void**)&swapChain);
+		swapChain->GetDesc(&swapChainDesc);
+		unsigned int bufferByteSize = (sizeof(sceneData) + skybox.meshCount * sizeof(MESH_DATA)) * swapChainDesc.BufferCount;
+		creator->CreateCommittedResource( // using UPLOAD heap for simplicity
+			&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD), // DEFAULT recommend  
+			D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Buffer(bufferByteSize),
+			D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&(skybox.constantBuffer)));
+		// Transfer triangle data to the index buffer.
+		UINT8* constantBufferMemoryLocation;
+		skybox.constantBuffer->Map(0, &CD3DX12_RANGE(0, 0),
+			reinterpret_cast<void**>(&constantBufferMemoryLocation));
+		memcpy(constantBufferMemoryLocation, &sceneData, sizeof(sceneData));
+		constantBufferMemoryLocation += sizeof(sceneData);
+		for (int i = 0; i < skybox.meshCount; i++)
+		{
+			memcpy(constantBufferMemoryLocation, &skybox.meshData, sizeof(MESH_DATA));
+			constantBufferMemoryLocation += sizeof(MESH_DATA);
+		}
+
+		skybox.constantBuffer->Unmap(0, nullptr);
+
+		D3D12_DESCRIPTOR_HEAP_DESC descriptorHeapDesc{};
+		descriptorHeapDesc.NumDescriptors = swapChainDesc.BufferCount;
+		descriptorHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+		descriptorHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+
+		creator->CreateDescriptorHeap(&descriptorHeapDesc, IID_PPV_ARGS(&(skybox.descriptorHeap[0])));
+
+		D3D12_CONSTANT_BUFFER_VIEW_DESC bufferDesc;
+		bufferDesc.BufferLocation = skybox.constantBuffer.Get()->GetGPUVirtualAddress();
+		bufferDesc.SizeInBytes = bufferByteSize;
+
+		D3D12_CPU_DESCRIPTOR_HANDLE descriptorHandle = skybox.descriptorHeap[0]->GetCPUDescriptorHandleForHeapStart();
+
+		creator->CreateConstantBufferView(&bufferDesc, descriptorHandle);
+
+		creator->Release();
 	}
 };
