@@ -20,4 +20,5 @@ struct SCENE_DATA
 struct VIEW_INFO
 {
 	DirectX::XMMATRIX viewMatrix;
+	DirectX::XMVECTOR cameraPos;
 };

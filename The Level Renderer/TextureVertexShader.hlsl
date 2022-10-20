@@ -47,6 +47,13 @@ struct MESH_DATA
     unsigned int padding[28];
 };
 
+cbuffer VIEW_INFO : register(b2, Space0)
+{
+    float4x4 viewportMatrix;
+    float4 cameraPos;
+    //unsigned int padding[]
+};
+
 ConstantBuffer<SCENE_DATA> cameraAndLights : register(b0, Space0);
 ConstantBuffer<MESH_DATA> meshInfo : register(b1, Space0);
 

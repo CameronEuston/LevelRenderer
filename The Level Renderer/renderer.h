@@ -102,13 +102,13 @@ public:
 
 	Renderer(GW::SYSTEM::GWindow _win, GW::GRAPHICS::GDirectX12Surface _d3d)
 	{
-		viewports[0].MinDepth = 0;
+		viewports[0].MinDepth = .2f;
 		viewports[0].MaxDepth = 1;
 		viewports[0].TopLeftX = 0;
 		viewports[0].TopLeftY = 0;
 
 		viewports[1].MinDepth = 0;
-		viewports[1].MaxDepth = 1;
+		viewports[1].MaxDepth = .2f;
 		viewports[1].TopLeftX = 0;
 		viewports[1].TopLeftY = 0;
 
@@ -248,20 +248,24 @@ public:
 		win.GetHeight(height);
 		viewports[0].Height = (float)height;
 
-		viewports[1].Width = width / 6.0f;
-		viewports[1].Height = height / 6.0f;
+		viewports[1].Width = width / 4.0f;
+		viewports[1].Height = height / 4.0f;
 
 		cmd->RSSetViewports(1, &viewports[0]);
+
+		VIEW_INFO playerCam;
+
+		playerCam.viewMatrix = viewMatrix;
 
 		sceneData.viewMatrix = viewMatrix;
 		
 		DirectX::XMVECTOR determinant = DirectX::XMMatrixDeterminant(viewMatrix);
 		viewMatrix = DirectX::XMMatrixInverse(&determinant, viewMatrix);
 		sceneData.camPos = viewMatrix.r[3];
+		playerCam.cameraPos = viewMatrix.r[3];
 		viewMatrix = DirectX::XMMatrixInverse(&determinant, viewMatrix);
-		
-		VIEW_INFO playerCam = {viewMatrix};
-		cmd->SetGraphicsRoot32BitConstants(2, 16, &playerCam, 0);
+
+		cmd->SetGraphicsRoot32BitConstants(2, 20, &playerCam, 0);
 		// now we can draw
 		for (int i = 0; i < models.size(); i++)
 		{
@@ -288,16 +292,18 @@ public:
 		{
 			cmd->RSSetViewports(1, &viewports[1]);
 
+			VIEW_INFO presetCam;
+			presetCam.viewMatrix = views[0];
+
 			sceneData.viewMatrix = views[0];
 
 			DirectX::XMVECTOR determinantPreset = DirectX::XMMatrixDeterminant(views[0]);
 			views[0] = DirectX::XMMatrixInverse(&determinantPreset, views[0]);
 			sceneData.camPos = views[0].r[3];
-
+			presetCam.cameraPos = views[0].r[3];
 			views[0] = DirectX::XMMatrixInverse(&determinantPreset, views[0]);
 
-			VIEW_INFO presetCam = {views[0]};
-			cmd->SetGraphicsRoot32BitConstants(2, 16, &presetCam, 0);
+			cmd->SetGraphicsRoot32BitConstants(2, 20, &presetCam, 0);
 
 			// now we can draw
 			for (int i = 0; i < models.size(); i++)
