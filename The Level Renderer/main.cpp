@@ -2,12 +2,15 @@
 #define GATEWARE_ENABLE_CORE // All libraries need this
 #define GATEWARE_ENABLE_SYSTEM // Graphics libs require system level libraries
 #define GATEWARE_ENABLE_GRAPHICS // Enables all Graphics Libraries
+#define GATEWARE_ENABLE_INPUT
+#define GATEWARE_ENABLE_MATH
+
 // Ignore some GRAPHICS libraries we aren't going to use
 #define GATEWARE_DISABLE_GDIRECTX11SURFACE // we have another template for this
 #define GATEWARE_DISABLE_GOPENGLSURFACE // we have another template for this
 #define GATEWARE_DISABLE_GVULKANSURFACE // we have another template for this
 #define GATEWARE_DISABLE_GRASTERSURFACE // we have another template for this
-#define GATEWARE_ENABLE_INPUT
+
 
 // TODO: Part 2a
 // TODO: Part 4a
@@ -63,6 +66,7 @@ int main()
 						cmd->ClearDepthStencilView(dsv, D3D12_CLEAR_FLAG_DEPTH, 1, 0, 0, nullptr);
 						
 						renderer.UpdateCamera();
+						renderer.SelectLevel();
 						renderer.Render(); // draw
 						d3d12.EndFrame(false);
 						cmd->Release();

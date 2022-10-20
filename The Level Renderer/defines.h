@@ -1,5 +1,7 @@
 #pragma once
 #include <DirectXMath.h>
+#include <Windows.h>
+#include <shobjidl.h>
 
 float pi = 3.14159265359;
 
@@ -15,9 +17,7 @@ struct SCENE_DATA
 	DirectX::XMVECTOR padding[4];
 };
 
-struct SHADER_VARS
+struct VIEW_INFO
 {
-	DirectX::XMMATRIX worldMatrix;
 	DirectX::XMMATRIX viewMatrix;
-	DirectX::XMMATRIX projectionMatrix;
 };

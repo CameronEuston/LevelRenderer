@@ -13,10 +13,12 @@ ADD_DEFINITIONS(-D_UNICODE)
 set(VERTEX_SHADERS 
 	# add vertex shader (.hlsl) files here
 	VertexShader.hlsl
+	TextureVertexShader.hlsl
 )
 set(PIXEL_SHADERS 
 	# add pixel shader (.hlsl) files here
 	PixelShader.hlsl
+	TexturePixelShader.hlsl
 )
 
 # Add any new C/C++ source code here
@@ -41,3 +43,11 @@ set_source_files_properties( ${PIXEL_SHADERS} PROPERTIES
 	VS_SHADER_TYPE Pixel VS_SHADER_MODEL 5.1 VS_SHADER_ENTRYPOINT main 
 	VS_SHADER_ENABLE_DEBUG $<$<CONFIG:Debug>:true>
 )
+
+# add support for dds texture loading
+include_directories(${CMAKE_SOURCE_DIR}/directxtk12/include)
+# Find the libraries
+find_library(DDS_LIB_D NAMES DirectXTK12 PATHS ${CMAKE_SOURCE_DIR}/directxtk12/lib/x64/Debug)
+find_library(DDS_LIB_R NAMES DirectXTK12 PATHS ${CMAKE_SOURCE_DIR}/directxtk12/lib/x64/Release)
+# link the ktx sdk include and lib files
+target_link_libraries(Final_Project debug ${DDS_LIB_D} optimized ${DDS_LIB_R})

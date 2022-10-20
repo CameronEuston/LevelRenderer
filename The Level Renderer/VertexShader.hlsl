@@ -46,6 +46,12 @@ struct MESH_DATA
     unsigned int padding[28];
 };
 
+cbuffer VIEW_INFO : register(b2, Space0)
+{
+    float4x4 viewportMatrix;
+    //unsigned int padding[]
+};
+
 ConstantBuffer<SCENE_DATA> cameraAndLights : register(b0, Space0);
 ConstantBuffer<MESH_DATA> meshInfo : register(b1, Space0);
 
@@ -63,10 +69,9 @@ PS_INPUT main(VS_INPUT input)
     output.posW = input.inputPosition;
     output.posH = float4(input.inputPosition, 1);
     output.nrmW = input.inputNormal;
-	
 	// TODO: Part 1h
     output.posH = mul(output.posH, meshInfo.world);
-    output.posH = mul(output.posH, cameraAndLights.viewMatrix);
+    output.posH = mul(output.posH, viewportMatrix);
     output.posH = mul(output.posH, cameraAndLights.projectionMatrix);
 	
     output.posW = mul(float4(output.posW, 1), meshInfo.world).xyz;
