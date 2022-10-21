@@ -55,6 +55,11 @@ class Renderer
 		return output;
 	}
 
+	inline UINT CalculateConstantBufferByteSize(UINT byteSize)
+	{
+		return (byteSize + (D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT - 1)) & ~(D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT - 1);
+	};
+
 	// proxy handles
 	GW::SYSTEM::GWindow win;
 	GW::GRAPHICS::GDirectX12Surface d3d;
@@ -95,8 +100,8 @@ class Renderer
 	std::string levelName;
 
 	D3D12_VIEWPORT viewports[2];
-
-	//int lightRootConstantSize;
+	int numLightDatas;
+	LIGHT_INFO lightData;
 
 public:
 	std::vector<Model> models;
@@ -121,6 +126,8 @@ public:
 		d3d = _d3d;
 		ID3D12Device* creator;
 		d3d.GetDevice((void**)&creator);
+		ID3D12GraphicsCommandList* cmd;
+		d3d.GetCommandList((void**)&cmd);
 
 		input.Create(win);
 		controller.Create();
@@ -187,14 +194,15 @@ public:
 		};
 		
 		//normal root param stuff
-		CD3DX12_ROOT_PARAMETER rootParams[3];
+		CD3DX12_ROOT_PARAMETER rootParams[4];
 
 		rootParams[0].InitAsConstantBufferView(0);
 		rootParams[1].InitAsConstantBufferView(1);
-		rootParams[2].InitAsConstants(20, 2);
+		rootParams[2].InitAsConstantBufferView(2);
+		rootParams[3].InitAsConstants(20, 3);
 
 		CD3DX12_ROOT_SIGNATURE_DESC rootDesc;
-		rootDesc.Init(3, rootParams, 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+		rootDesc.Init(4, rootParams, 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
 
 		Microsoft::WRL::ComPtr<ID3DBlob> signature;
 		D3D12SerializeRootSignature(&rootDesc,
@@ -225,6 +233,30 @@ public:
 		pastTime = std::chrono::high_resolution_clock::now();
 		
 		ParseData();
+
+		numLightDatas = max(pointLights.size(), spotLights.size());
+
+		lightData.numPointLights = pointLights.size();
+		lightData.numSpotLights = spotLights.size();
+		
+		for (int i = 0; i < pointLights.size() && i < 16; i++)
+		{
+			lightData.pointLights[i] = pointLights[i];
+		}
+		for (int i = 0; i < spotLights.size() && i < 16; i++)
+		{
+			lightData.spotLights[i] = spotLights[i];
+		}
+
+		for (int i = 0; i < models.size(); i++)
+		{	
+			UINT8* constantBufferMemoryLocation;
+			models[i].constantBuffer->Map(0, &CD3DX12_RANGE(0, 0),
+				reinterpret_cast<void**>(&constantBufferMemoryLocation));
+			memcpy(constantBufferMemoryLocation + sizeof(sceneData) + sizeof(MESH_DATA) * models[i].meshCount, &lightData, CalculateConstantBufferByteSize(sizeof(LIGHT_INFO)));
+			models[i].constantBuffer->Unmap(0, nullptr);
+			
+		}
 		//CreateSkyBox(skybox);
 	}
 
@@ -268,7 +300,7 @@ public:
 		playerCam.cameraPos = viewMatrix.r[3];
 		viewMatrix = DirectX::XMMatrixInverse(&determinant, viewMatrix);
 
-		cmd->SetGraphicsRoot32BitConstants(2, 20, &playerCam, 0);
+		cmd->SetGraphicsRoot32BitConstants(3, 20, &playerCam, 0);
 
 		// now we can draw
 		for (int i = 0; i < models.size(); i++)
@@ -280,6 +312,7 @@ public:
 			cmd->SetDescriptorHeaps(1, models[i].descriptorHeap);
 
 			cmd->SetGraphicsRootConstantBufferView(0, models[i].constantBuffer.Get()->GetGPUVirtualAddress());
+			cmd->SetGraphicsRootConstantBufferView(2, models[i].constantBuffer.Get()->GetGPUVirtualAddress() + sizeof(sceneData) + sizeof(MESH_DATA) * models[i].meshCount);
 			for (int j = 0; j < models[i].meshCount; j++)
 			{
 				cmd->SetGraphicsRootConstantBufferView(1, models[i].constantBuffer.Get()->GetGPUVirtualAddress() + sizeof(sceneData) + (sizeof(MESH_DATA) * j));
@@ -302,7 +335,7 @@ public:
 			presetCam.cameraPos = views[0].r[3];
 			views[0] = DirectX::XMMatrixInverse(&determinantPreset, views[0]);
 
-			cmd->SetGraphicsRoot32BitConstants(2, 20, &presetCam, 0);
+			cmd->SetGraphicsRoot32BitConstants(3, 20, &presetCam, 0);
 
 			// now we can draw
 			for (int i = 0; i < models.size(); i++)
@@ -313,6 +346,7 @@ public:
 				cmd->SetDescriptorHeaps(1, models[i].descriptorHeap);
 
 				cmd->SetGraphicsRootConstantBufferView(0, models[i].constantBuffer.Get()->GetGPUVirtualAddress());
+				cmd->SetGraphicsRootConstantBufferView(2, models[i].constantBuffer.Get()->GetGPUVirtualAddress() + sizeof(sceneData) + sizeof(MESH_DATA) * models[i].meshCount);
 				for (int j = 0; j < models[i].meshCount; j++)
 				{
 					cmd->SetGraphicsRootConstantBufferView(1, models[i].constantBuffer.Get()->GetGPUVirtualAddress() + sizeof(sceneData) + (sizeof(MESH_DATA) * j));
@@ -322,7 +356,6 @@ public:
 		}
 
 		sceneData.viewMatrix = viewMatrix;
-
 
 		viewMatrix = DirectX::XMMatrixInverse(&determinant, viewMatrix);
 
@@ -750,7 +783,7 @@ public:
 					coordinates = SplitString(stringVector, ',');
 					newSpotLight.r[3] = { std::stof(coordinates[0]), std::stof(coordinates[1]), std::stof(coordinates[2]), std::stof(coordinates[3]) };
 
-					pointLights.push_back(newSpotLight);
+					spotLights.push_back(newSpotLight);
 				}
 				std::cout << std::endl;
 

@@ -46,13 +46,20 @@ struct MESH_DATA
     unsigned int padding[28];
 };
 
-cbuffer VIEW_INFO : register(b2, Space0)
+struct LIGHT_INFO
+{
+    unsigned int numPointLights, numSpotLights;
+    float4x4 pointLight[16], spotLight[16];
+};
+
+cbuffer VIEW_INFO : register(b3, Space0)
 {
     float4x4 viewportMatrix;
     float4 cameraPos;
 };
 
 ConstantBuffer<SCENE_DATA> cameraAndLights : register(b0, Space0);
+ConstantBuffer<LIGHT_INFO> lightInfo : register(b2, Space0);
 ConstantBuffer<MESH_DATA> meshInfo : register(b1, Space0);
 
 // an ultra simple hlsl vertex shader
