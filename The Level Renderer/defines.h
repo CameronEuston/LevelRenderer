@@ -22,3 +22,16 @@ struct VIEW_INFO
 	DirectX::XMMATRIX viewMatrix;
 	DirectX::XMVECTOR cameraPos;
 };
+
+struct LIGHT_NUMS
+{
+	unsigned int numPointLights, numSpotLights;
+};
+struct POINT_LIGHTS
+{
+	DirectX::XMMATRIX pointLights[16];
+};
+struct SPOT_LIGHTS
+{
+	DirectX::XMMATRIX spotLights[16];
+};

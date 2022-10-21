@@ -50,7 +50,6 @@ cbuffer VIEW_INFO : register(b2, Space0)
 {
     float4x4 viewportMatrix;
     float4 cameraPos;
-    //unsigned int padding[]
 };
 
 ConstantBuffer<SCENE_DATA> cameraAndLights : register(b0, Space0);

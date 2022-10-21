@@ -85,9 +85,9 @@ class Renderer
 	Microsoft::WRL::ComPtr<ID3D12PipelineState>	texturePipeline;
 	Microsoft::WRL::ComPtr<ID3D12RootSignature>	textureRootSignature;
 
-	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap>	cbvHeap;		
-	UINT											cbvDescriptorSize;	
-	Microsoft::WRL::ComPtr<ID3D12Resource>			cbvResource;	
+	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap>	cbvHeap;
+	UINT											cbvDescriptorSize;
+	Microsoft::WRL::ComPtr<ID3D12Resource>			cbvResource;
 	GW::MATH::GMATRIXF* cbvResourceData;
 
 	H2B::Parser parser;
@@ -96,9 +96,13 @@ class Renderer
 
 	D3D12_VIEWPORT viewports[2];
 
+	//int lightRootConstantSize;
+
 public:
 	std::vector<Model> models;
 	std::vector<DirectX::XMMATRIX> views;
+	std::vector<DirectX::XMMATRIX> pointLights;
+	std::vector<DirectX::XMMATRIX> spotLights;
 
 	Renderer(GW::SYSTEM::GWindow _win, GW::GRAPHICS::GDirectX12Surface _d3d)
 	{
@@ -127,7 +131,7 @@ public:
 		viewMatrix = DirectX::XMMatrixMultiply(viewMatrix, DirectX::XMMatrixRotationY(0));
 		DirectX::XMVECTOR determinant = DirectX::XMMatrixDeterminant(viewMatrix);
 		viewMatrix = DirectX::XMMatrixInverse(&determinant, viewMatrix);
-		
+
 		verticalFOV = 65 * pi / 180;
 		nearPlane = .1f;
 		farPlane = 100;
@@ -136,17 +140,17 @@ public:
 		float yScale = cosf(verticalFOV * .5f) / sinf(verticalFOV * .5f);
 		float xScale = yScale * aspectRatio;
 
-		projectionMatrix.r[0] = {xScale, 0, 0, 0};
-		projectionMatrix.r[1] = {0, yScale, 0, 0 };
-		projectionMatrix.r[2] = {0, 0, farPlane / (farPlane - nearPlane), 1};
-		projectionMatrix.r[3] = {0, 0, -(farPlane * nearPlane) / (farPlane - nearPlane), 0};
+		projectionMatrix.r[0] = { xScale, 0, 0, 0 };
+		projectionMatrix.r[1] = { 0, yScale, 0, 0 };
+		projectionMatrix.r[2] = { 0, 0, farPlane / (farPlane - nearPlane), 1 };
+		projectionMatrix.r[3] = { 0, 0, -(farPlane * nearPlane) / (farPlane - nearPlane), 0 };
 
 		sceneData.sunDirection = { -1, -1, 2, 0 };
 		sceneData.sunDirection = DirectX::XMVector4Normalize(sceneData.sunDirection);
 		sceneData.sunColor = { .9f, .9f, 1.0f, 1 };
 		sceneData.viewMatrix = viewMatrix;
 		sceneData.projectionMatrix = projectionMatrix;
-		sceneData.sunAmbient = { .25f, .25f, .35f, 1};
+		sceneData.sunAmbient = { .25f, .25f, .35f, 1 };
 		sceneData.camPos = { 0, 0, 0, 0 };
 
 		// Create Vertex Shader
@@ -175,27 +179,27 @@ public:
 			abort();
 		}
 		// Create Input Layout
-		D3D12_INPUT_ELEMENT_DESC format[] = 
+		D3D12_INPUT_ELEMENT_DESC format[] =
 		{
 			{"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
 			{"COLOR", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
 			{"NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 24, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0}
 		};
-
+		
 		//normal root param stuff
 		CD3DX12_ROOT_PARAMETER rootParams[3];
 
 		rootParams[0].InitAsConstantBufferView(0);
 		rootParams[1].InitAsConstantBufferView(1);
-		rootParams[2].InitAsConstants(16, 2);
+		rootParams[2].InitAsConstants(20, 2);
 
 		CD3DX12_ROOT_SIGNATURE_DESC rootDesc;
 		rootDesc.Init(3, rootParams, 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
 
 		Microsoft::WRL::ComPtr<ID3DBlob> signature;
-		D3D12SerializeRootSignature(&rootDesc, 
+		D3D12SerializeRootSignature(&rootDesc,
 			D3D_ROOT_SIGNATURE_VERSION_1, &signature, &errors);
-		creator->CreateRootSignature(0, signature->GetBufferPointer(), 
+		creator->CreateRootSignature(0, signature->GetBufferPointer(),
 			signature->GetBufferSize(), IID_PPV_ARGS(&rootSignature));
 
 		// create pipeline state
@@ -219,12 +223,11 @@ public:
 		creator->Release();
 
 		pastTime = std::chrono::high_resolution_clock::now();
-
+		
 		ParseData();
-
 		//CreateSkyBox(skybox);
 	}
-	
+
 	void Render()
 	{
 		// grab the context & render target
@@ -258,7 +261,7 @@ public:
 		playerCam.viewMatrix = viewMatrix;
 
 		sceneData.viewMatrix = viewMatrix;
-		
+
 		DirectX::XMVECTOR determinant = DirectX::XMMatrixDeterminant(viewMatrix);
 		viewMatrix = DirectX::XMMatrixInverse(&determinant, viewMatrix);
 		sceneData.camPos = viewMatrix.r[3];
@@ -266,14 +269,10 @@ public:
 		viewMatrix = DirectX::XMMatrixInverse(&determinant, viewMatrix);
 
 		cmd->SetGraphicsRoot32BitConstants(2, 20, &playerCam, 0);
+
 		// now we can draw
 		for (int i = 0; i < models.size(); i++)
 		{
-			/*UINT8* constantBufferMemoryLocation;
-			models[i].constantBuffer->Map(0, &CD3DX12_RANGE(0, 0),
-				reinterpret_cast<void**>(&constantBufferMemoryLocation));
-			memcpy(constantBufferMemoryLocation, &sceneData, sizeof(sceneData));
-			models[i].constantBuffer->Unmap(0, nullptr);*/
 
 			cmd->IASetVertexBuffers(0, 1, &(models[i].vertexView));
 			cmd->IASetIndexBuffer(&(models[i].indexView));
@@ -321,10 +320,10 @@ public:
 				}
 			}
 		}
-		
+
 		sceneData.viewMatrix = viewMatrix;
 
-		
+
 		viewMatrix = DirectX::XMMatrixInverse(&determinant, viewMatrix);
 
 		sceneData.camPos = viewMatrix.r[3];
@@ -384,7 +383,7 @@ public:
 		float stickButton = 0;
 		unsigned int screenHeight = 0;
 		unsigned int screenWidth = 0;
-		
+
 		if (input.GetMouseDelta(mouseX, mouseY) == GW::GReturn::REDUNDANT)
 		{
 			mouseX = 0;
@@ -420,8 +419,8 @@ public:
 
 		DirectX::XMVECTOR worldTranslation = { 0, yChange, 0 };
 		viewMatrix.r[3] = DirectX::XMVectorAdd(viewMatrix.r[3], worldTranslation);
-		
-	
+
+
 		//inversing back into view space
 		viewMatrix = DirectX::XMMatrixInverse(&determinant, viewMatrix);
 
@@ -429,13 +428,13 @@ public:
 		viewMatrix.r[3] = DirectX::XMVectorAdd(viewMatrix.r[3], localTranslation);
 
 		viewMatrix = DirectX::XMMatrixMultiply(viewMatrix, DirectX::XMMatrixRotationX(-totalPitch));
-		
+
 		viewMatrix = DirectX::XMMatrixInverse(&determinant, viewMatrix);
 		DirectX::XMVECTOR position = viewMatrix.r[3];
 		viewMatrix = DirectX::XMMatrixMultiply(viewMatrix, DirectX::XMMatrixRotationY(totalYaw));
 		viewMatrix.r[3] = position;
 		sceneData.camPos = position;
-		
+
 		skybox.meshData.world = DirectX::XMMatrixIdentity();
 		skybox.meshData.world *= 95;
 		skybox.meshData.world.r[3] = position;
@@ -443,7 +442,7 @@ public:
 		viewMatrix = DirectX::XMMatrixInverse(&determinant, viewMatrix);
 
 		sceneData.viewMatrix = viewMatrix;
-		
+
 
 		pastTime = nowTime;
 	}
@@ -516,7 +515,7 @@ public:
 					{
 
 						Model model;
-						
+
 						model.meshData.world = newMesh;
 
 						//index buffer
@@ -662,6 +661,96 @@ public:
 					newView = DirectX::XMMatrixInverse(&determinant, newView);
 
 					views.push_back(newView);
+				}
+				else if (lineInfo.compare("POINT") == 0)
+				{
+					DirectX::XMMATRIX newPointLight;
+
+					std::getline(inputStream, objName);
+					int periodPos = objName.find_last_of('.');
+					if (periodPos != -1)
+						objName.erase(periodPos);
+
+					DirectX::XMVECTOR vector;
+					std::string stringVector;
+					std::string extractedNumber;
+					std::vector<std::string> coordinates;
+
+					std::getline(inputStream, lineInfo);
+					stringVector = lineInfo;
+					stringVector = stringVector.substr(13, 256);
+					stringVector.erase(stringVector.length() - 1);
+					coordinates = SplitString(stringVector, ',');
+					newPointLight.r[0] = { std::stof(coordinates[0]), std::stof(coordinates[1]), std::stof(coordinates[2]), std::stof(coordinates[3]) };
+
+					std::getline(inputStream, lineInfo);
+					stringVector = lineInfo;
+					stringVector = stringVector.substr(13, 256);
+					stringVector.erase(stringVector.length() - 1);
+					coordinates = SplitString(stringVector, ',');
+					newPointLight.r[1] = { std::stof(coordinates[0]), std::stof(coordinates[1]), std::stof(coordinates[2]), std::stof(coordinates[3]) };
+
+					std::getline(inputStream, lineInfo);
+					stringVector = lineInfo;
+					stringVector = stringVector.substr(13, 256);
+					stringVector.erase(stringVector.length() - 1);
+					coordinates = SplitString(stringVector, ',');
+					newPointLight.r[2] = { std::stof(coordinates[0]), std::stof(coordinates[1]), std::stof(coordinates[2]), std::stof(coordinates[3]) };
+
+					std::getline(inputStream, lineInfo);
+					stringVector = lineInfo;
+					stringVector = stringVector.substr(13, 256);
+					stringVector.erase(stringVector.length() - 1);
+					stringVector.erase(stringVector.length() - 1);
+					coordinates = SplitString(stringVector, ',');
+					newPointLight.r[3] = { std::stof(coordinates[0]), std::stof(coordinates[1]), std::stof(coordinates[2]), std::stof(coordinates[3]) };
+
+					pointLights.push_back(newPointLight);
+				}
+				else if (lineInfo.compare("SPOT") == 0)
+				{
+					DirectX::XMMATRIX newSpotLight;
+
+					std::getline(inputStream, objName);
+					int periodPos = objName.find_last_of('.');
+					if (periodPos != -1)
+						objName.erase(periodPos);
+
+					DirectX::XMVECTOR vector;
+					std::string stringVector;
+					std::string extractedNumber;
+					std::vector<std::string> coordinates;
+
+					std::getline(inputStream, lineInfo);
+					stringVector = lineInfo;
+					stringVector = stringVector.substr(13, 256);
+					stringVector.erase(stringVector.length() - 1);
+					coordinates = SplitString(stringVector, ',');
+					newSpotLight.r[0] = { std::stof(coordinates[0]), std::stof(coordinates[1]), std::stof(coordinates[2]), std::stof(coordinates[3]) };
+
+					std::getline(inputStream, lineInfo);
+					stringVector = lineInfo;
+					stringVector = stringVector.substr(13, 256);
+					stringVector.erase(stringVector.length() - 1);
+					coordinates = SplitString(stringVector, ',');
+					newSpotLight.r[1] = { std::stof(coordinates[0]), std::stof(coordinates[1]), std::stof(coordinates[2]), std::stof(coordinates[3]) };
+
+					std::getline(inputStream, lineInfo);
+					stringVector = lineInfo;
+					stringVector = stringVector.substr(13, 256);
+					stringVector.erase(stringVector.length() - 1);
+					coordinates = SplitString(stringVector, ',');
+					newSpotLight.r[2] = { std::stof(coordinates[0]), std::stof(coordinates[1]), std::stof(coordinates[2]), std::stof(coordinates[3]) };
+
+					std::getline(inputStream, lineInfo);
+					stringVector = lineInfo;
+					stringVector = stringVector.substr(13, 256);
+					stringVector.erase(stringVector.length() - 1);
+					stringVector.erase(stringVector.length() - 1);
+					coordinates = SplitString(stringVector, ',');
+					newSpotLight.r[3] = { std::stof(coordinates[0]), std::stof(coordinates[1]), std::stof(coordinates[2]), std::stof(coordinates[3]) };
+
+					pointLights.push_back(newSpotLight);
 				}
 				std::cout << std::endl;
 
@@ -881,7 +970,7 @@ public:
 		cmd->Release();
 		queue->Release();
 	}
-	
+
 	HRESULT LoadTexture(Microsoft::WRL::ComPtr<ID3D12Device> device, Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList>& cmd,
 		const std::wstring filepath, Microsoft::WRL::ComPtr<ID3D12Resource>& resource, Microsoft::WRL::ComPtr<ID3D12Resource>& upload, bool* IsCubeMap)
 	{
