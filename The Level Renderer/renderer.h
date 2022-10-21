@@ -255,8 +255,29 @@ public:
 				reinterpret_cast<void**>(&constantBufferMemoryLocation));
 			memcpy(constantBufferMemoryLocation + sizeof(sceneData) + sizeof(MESH_DATA) * models[i].meshCount, &lightData, CalculateConstantBufferByteSize(sizeof(LIGHT_INFO)));
 			models[i].constantBuffer->Unmap(0, nullptr);
-			
+
+			IDXGISwapChain4* swapChain;
+			DXGI_SWAP_CHAIN_DESC swapChainDesc;
+			d3d.GetSwapchain4((void**)&swapChain);
+			swapChain->GetDesc(&swapChainDesc);
+			unsigned int bufferByteSize = (sizeof(sceneData) + models[i].meshCount * sizeof(MESH_DATA)) + CalculateConstantBufferByteSize(sizeof(LIGHT_INFO)) * swapChainDesc.BufferCount;
+			D3D12_DESCRIPTOR_HEAP_DESC descriptorHeapDesc{};
+			descriptorHeapDesc.NumDescriptors = swapChainDesc.BufferCount;
+			descriptorHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+			descriptorHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+
+			creator->CreateDescriptorHeap(&descriptorHeapDesc, IID_PPV_ARGS(&(models[i].descriptorHeap[0])));
+
+			D3D12_CONSTANT_BUFFER_VIEW_DESC bufferDesc;
+			bufferDesc.BufferLocation = models[i].constantBuffer.Get()->GetGPUVirtualAddress();
+			bufferDesc.SizeInBytes = bufferByteSize;
+
+			D3D12_CPU_DESCRIPTOR_HANDLE descriptorHandle = models[i].descriptorHeap[0]->GetCPUDescriptorHandleForHeapStart();
+
+			creator->CreateConstantBufferView(&bufferDesc, descriptorHandle);
 		}
+
+		
 		//CreateSkyBox(skybox);
 	}
 
@@ -601,7 +622,7 @@ public:
 						DXGI_SWAP_CHAIN_DESC swapChainDesc;
 						d3d.GetSwapchain4((void**)&swapChain);
 						swapChain->GetDesc(&swapChainDesc);
-						unsigned int bufferByteSize = (sizeof(sceneData) + model.meshCount * sizeof(MESH_DATA)) * swapChainDesc.BufferCount;
+						unsigned int bufferByteSize = (sizeof(sceneData) + model.meshCount * sizeof(MESH_DATA)) + CalculateConstantBufferByteSize(sizeof(LIGHT_INFO)) * swapChainDesc.BufferCount;
 						creator->CreateCommittedResource( // using UPLOAD heap for simplicity
 							&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD), // DEFAULT recommend  
 							D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Buffer(bufferByteSize),
@@ -610,7 +631,9 @@ public:
 						UINT8* constantBufferMemoryLocation;
 						model.constantBuffer->Map(0, &CD3DX12_RANGE(0, 0),
 							reinterpret_cast<void**>(&constantBufferMemoryLocation));
+
 						memcpy(constantBufferMemoryLocation, &sceneData, sizeof(sceneData));
+
 						constantBufferMemoryLocation += sizeof(sceneData);
 						for (int i = 0; i < model.meshCount; i++)
 						{
@@ -620,21 +643,6 @@ public:
 						}
 
 						model.constantBuffer->Unmap(0, nullptr);
-
-						D3D12_DESCRIPTOR_HEAP_DESC descriptorHeapDesc{};
-						descriptorHeapDesc.NumDescriptors = swapChainDesc.BufferCount;
-						descriptorHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-						descriptorHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
-
-						creator->CreateDescriptorHeap(&descriptorHeapDesc, IID_PPV_ARGS(&(model.descriptorHeap[0])));
-
-						D3D12_CONSTANT_BUFFER_VIEW_DESC bufferDesc;
-						bufferDesc.BufferLocation = model.constantBuffer.Get()->GetGPUVirtualAddress();
-						bufferDesc.SizeInBytes = bufferByteSize;
-
-						D3D12_CPU_DESCRIPTOR_HANDLE descriptorHandle = model.descriptorHeap[0]->GetCPUDescriptorHandleForHeapStart();
-
-						creator->CreateConstantBufferView(&bufferDesc, descriptorHandle);
 
 						models.push_back(model);
 

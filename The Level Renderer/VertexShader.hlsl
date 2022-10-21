@@ -49,7 +49,7 @@ struct MESH_DATA
 struct LIGHT_INFO
 {
     unsigned int numPointLights, numSpotLights;
-    float4x4 pointLight[16], spotLight[16];
+    float4x4 pointLights[16], spotLights[16];
 };
 
 cbuffer VIEW_INFO : register(b3, Space0)

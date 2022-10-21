@@ -1,3 +1,4 @@
+#pragma pack_matrix(row_major)
 // an ultra simple hlsl pixel shader
 // TODO: Part 2b
 // TODO: Part 4f
@@ -44,7 +45,7 @@ struct MESH_DATA
 struct LIGHT_INFO
 {
     unsigned int numPointLights, numSpotLights;
-    float4x4 pointLight[16], spotLight[16];
+    float4x4 pointLights[16], spotLights[16];
 };
 
 cbuffer VIEW_INFO : register(b3, Space0)
@@ -60,6 +61,30 @@ ConstantBuffer<MESH_DATA> meshInfo : register(b1, Space0);
 
 float4 main(PS_INPUT input) : SV_TARGET
 {
+    float3 pointLightResult;
+    for (int i = 0; i < lightInfo.numPointLights; i++)
+    {
+        float3 lightDir = normalize(lightInfo.pointLights[i][3].xyz - input.posW);
+        float lightRatio = saturate(dot(lightDir, input.nrmW));
+        float attenuation = 1.0f - saturate(length(lightInfo.pointLights[i][3].xyz - input.posW) / 5);
+        float3 result = attenuation * lightRatio * lightInfo.pointLights[i][1].xyz * meshInfo.material.Kd;
+        pointLightResult += result;
+    }
+    
+    float3 spotLightResult;
+    for (int i = 0; i < lightInfo.numSpotLights; i++)
+    {
+        float3 lightDir = normalize(lightInfo.spotLights[i][3].xyz - input.posW);
+        float surfaceRatio = saturate(dot(-lightDir, lightInfo.spotLights[i][2].xyz));
+        float spotFactor = (surfaceRatio > lightInfo.spotLights[i][1].w) ? 1.0f : 0.0f;
+        float lightRatio = saturate(dot(lightDir, input.nrmW));
+        float attenuation = 1.0f - saturate((lightInfo.spotLights[i][1].w - surfaceRatio) / (lightInfo.spotLights[i][1].w - lightInfo.spotLights[i][2].w));
+        attenuation *= attenuation;
+        float3 result = attenuation * spotFactor * lightRatio * lightInfo.spotLights[i][1].xyz * meshInfo.material.Kd;
+        
+        spotLightResult += result;
+    }
+    
     input.nrmW = normalize(input.nrmW);
   
 	// TODO: Part 3a
@@ -75,6 +100,7 @@ float4 main(PS_INPUT input) : SV_TARGET
     float3 reflectedLight = cameraAndLights.sunColor.xyz * meshInfo.material.Ks * intensity;
 	
     finalColor = (lightRatio * cameraAndLights.sunColor + cameraAndLights.sunAmbient) * diffuse + float4(reflectedLight, 0);
-	
+    finalColor += float4(pointLightResult, 0) + float4(spotLightResult, 0);
+    
     return float4(finalColor); 
 }
