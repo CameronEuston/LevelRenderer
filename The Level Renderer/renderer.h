@@ -233,50 +233,7 @@ public:
 		pastTime = std::chrono::high_resolution_clock::now();
 		
 		ParseData();
-
-		numLightDatas = max(pointLights.size(), spotLights.size());
-
-		lightData.numPointLights = pointLights.size();
-		lightData.numSpotLights = spotLights.size();
-		
-		for (int i = 0; i < pointLights.size() && i < 16; i++)
-		{
-			lightData.pointLights[i] = pointLights[i];
-		}
-		for (int i = 0; i < spotLights.size() && i < 16; i++)
-		{
-			lightData.spotLights[i] = spotLights[i];
-		}
-
-		for (int i = 0; i < models.size(); i++)
-		{	
-			UINT8* constantBufferMemoryLocation;
-			models[i].constantBuffer->Map(0, &CD3DX12_RANGE(0, 0),
-				reinterpret_cast<void**>(&constantBufferMemoryLocation));
-			memcpy(constantBufferMemoryLocation + sizeof(sceneData) + sizeof(MESH_DATA) * models[i].meshCount, &lightData, CalculateConstantBufferByteSize(sizeof(LIGHT_INFO)));
-			models[i].constantBuffer->Unmap(0, nullptr);
-
-			IDXGISwapChain4* swapChain;
-			DXGI_SWAP_CHAIN_DESC swapChainDesc;
-			d3d.GetSwapchain4((void**)&swapChain);
-			swapChain->GetDesc(&swapChainDesc);
-			unsigned int bufferByteSize = (sizeof(sceneData) + models[i].meshCount * sizeof(MESH_DATA)) + CalculateConstantBufferByteSize(sizeof(LIGHT_INFO)) * swapChainDesc.BufferCount;
-			D3D12_DESCRIPTOR_HEAP_DESC descriptorHeapDesc{};
-			descriptorHeapDesc.NumDescriptors = swapChainDesc.BufferCount;
-			descriptorHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-			descriptorHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
-
-			creator->CreateDescriptorHeap(&descriptorHeapDesc, IID_PPV_ARGS(&(models[i].descriptorHeap[0])));
-
-			D3D12_CONSTANT_BUFFER_VIEW_DESC bufferDesc;
-			bufferDesc.BufferLocation = models[i].constantBuffer.Get()->GetGPUVirtualAddress();
-			bufferDesc.SizeInBytes = bufferByteSize;
-
-			D3D12_CPU_DESCRIPTOR_HANDLE descriptorHandle = models[i].descriptorHeap[0]->GetCPUDescriptorHandleForHeapStart();
-
-			creator->CreateConstantBufferView(&bufferDesc, descriptorHandle);
-		}
-
+		SetLightsAndBuffer();
 		
 		//CreateSkyBox(skybox);
 	}
@@ -1103,5 +1060,57 @@ public:
 		}
 		models.clear();
 		ParseData();
+		SetLightsAndBuffer();
+	}
+
+	void SetLightsAndBuffer()
+	{
+		ID3D12Device* creator;
+		d3d.GetDevice((void**)&creator);
+		ID3D12GraphicsCommandList* cmd;
+		d3d.GetCommandList((void**)&cmd);
+
+		numLightDatas = max(pointLights.size(), spotLights.size());
+
+		lightData.numPointLights = pointLights.size();
+		lightData.numSpotLights = spotLights.size();
+
+		for (int i = 0; i < pointLights.size() && i < 16; i++)
+		{
+			lightData.pointLights[i] = pointLights[i];
+		}
+		for (int i = 0; i < spotLights.size() && i < 16; i++)
+		{
+			lightData.spotLights[i] = spotLights[i];
+		}
+
+		for (int i = 0; i < models.size(); i++)
+		{
+			UINT8* constantBufferMemoryLocation;
+			models[i].constantBuffer->Map(0, &CD3DX12_RANGE(0, 0),
+				reinterpret_cast<void**>(&constantBufferMemoryLocation));
+			memcpy(constantBufferMemoryLocation + sizeof(sceneData) + sizeof(MESH_DATA) * models[i].meshCount, &lightData, CalculateConstantBufferByteSize(sizeof(LIGHT_INFO)));
+			models[i].constantBuffer->Unmap(0, nullptr);
+
+			IDXGISwapChain4* swapChain;
+			DXGI_SWAP_CHAIN_DESC swapChainDesc;
+			d3d.GetSwapchain4((void**)&swapChain);
+			swapChain->GetDesc(&swapChainDesc);
+			unsigned int bufferByteSize = (sizeof(sceneData) + models[i].meshCount * sizeof(MESH_DATA)) + CalculateConstantBufferByteSize(sizeof(LIGHT_INFO)) * swapChainDesc.BufferCount;
+			D3D12_DESCRIPTOR_HEAP_DESC descriptorHeapDesc{};
+			descriptorHeapDesc.NumDescriptors = swapChainDesc.BufferCount;
+			descriptorHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+			descriptorHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+
+			creator->CreateDescriptorHeap(&descriptorHeapDesc, IID_PPV_ARGS(&(models[i].descriptorHeap[0])));
+
+			D3D12_CONSTANT_BUFFER_VIEW_DESC bufferDesc;
+			bufferDesc.BufferLocation = models[i].constantBuffer.Get()->GetGPUVirtualAddress();
+			bufferDesc.SizeInBytes = bufferByteSize;
+
+			D3D12_CPU_DESCRIPTOR_HANDLE descriptorHandle = models[i].descriptorHeap[0]->GetCPUDescriptorHandleForHeapStart();
+
+			creator->CreateConstantBufferView(&bufferDesc, descriptorHandle);
+		}
 	}
 };
